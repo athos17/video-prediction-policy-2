@@ -8,5 +8,5 @@ if [[ "${1:-}" == --help || "${1:-}" == help ]]; then
 fi
 export NNODES="${NNODES:-4}" NPROC_PER_NODE="${NPROC_PER_NODE:-8}"
 export VPP2_TRAIN_MODULE=vpp2.cli
-export VPP2_ACCELERATE_CONFIG=configs/robodojo/accelerate.yaml
+export VPP2_ACCELERATE_CONFIG=configs/libero/accelerate_zero2.yaml
 exec bash scripts/train.sh --config configs/marvin/train_joint.yaml "$@"
