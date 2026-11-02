@@ -123,6 +123,10 @@ def validate_preflight_config(cfg):
         output_file=str(probe.get("output_file", str(Path(cfg.output_dir) / "probe.json"))),
         video_size=list(cfg.data.train.video_size),
         contract_kwargs=dict(
-            video_frames=17, action_horizon=32, action_dim=16, proprio_steps=1, proprio_dim=16
+            video_frames=17,
+            action_horizon=32,
+            action_dim=int(cfg.model.action_dit_config.action_dim),
+            proprio_steps=1,
+            proprio_dim=int(cfg.model.proprio_dim),
         ),
     )

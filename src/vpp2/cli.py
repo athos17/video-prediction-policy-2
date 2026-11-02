@@ -40,8 +40,10 @@ def load_config(path, overrides=()):
         raise ValueError("Expected the reference Action2B architecture")
     if m.get("joint_denoising", False) or m.video_lora.enabled:
         raise ValueError("Joint denoising and LoRA are not part of this release")
-    if (d.action_horizon, d.condition_history_frames, d.condition_history_stride) != (32, 8, 25):
-        raise ValueError("Reference contract is horizon32/history8/stride25")
+    stride = cfg.get("reference_history_stride", 25)
+    history = (d.action_horizon, d.condition_history_frames, d.condition_history_stride)
+    if history != (32, 8, stride):
+        raise ValueError(f"Reference contract is horizon32/history8/stride{stride}")
     if cfg.get("lr_tail"):
         from .utils.lr_continuation import joint_multiplier
 
@@ -311,6 +313,7 @@ def main():
     p.add_argument("--video", required=True)
     p.add_argument("--output", required=True)
     p.add_argument("--config", default="configs/robodojo/train_100k.yaml")
+    p.add_argument("--expected-step", type=int, default=10000)
     p = sub.add_parser("export")
     for name in ("checkpoint", "config", "stats", "output"):
         p.add_argument("--" + name, required=True)
@@ -382,7 +385,9 @@ def main():
     elif args.command == "init-action":
         from .weights import initialize_action
 
-        result = initialize_action(args.video, args.config, args.output)
+        result = initialize_action(
+            args.video, args.config, args.output, expected_step=args.expected_step
+        )
     elif args.command == "export":
         from .weights import export
 

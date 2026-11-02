@@ -11,9 +11,10 @@ def validate_config(cfg):
         raise ValueError("Video-10k requires the standalone video model")
     if data._target_ != "vpp2.datasets.lerobot.video_event_dataset.VideoEventDataset":
         raise ValueError("Video-10k uses task-balanced video windows")
+    stride = cfg.get("reference_history_stride", 25)
     if (data.num_frames, data.action_video_freq_ratio, data.condition_history_frames,
-            data.condition_history_stride) != (97, 4, 8, 25):
-        raise ValueError("Video-10k requires 25 RGB frames, history8 and stride25")
+            data.condition_history_stride) != (97, 4, 8, stride):
+        raise ValueError(f"Video-10k requires 25 RGB frames, history8 and stride{stride}")
     if not data.condition_include_episode_first or not data.condition_history_target_prefix:
         raise ValueError("Video-10k requires the aligned episode-anchor/history prefix")
     if data.processor is not None or data.pretrained_norm_stats is not None:
