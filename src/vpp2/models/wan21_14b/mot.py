@@ -16,6 +16,7 @@ class MoT(nn.Module):
         self,
         mixtures: Dict[str, nn.Module],
         mot_checkpoint_mixed_attn: bool = True,
+        mot_split_attention: bool = False,
         use_fixed_video_layers: Optional[int] = None,
         use_video_tokens: bool = False,
     ):
@@ -28,6 +29,7 @@ class MoT(nn.Module):
         self.mixtures = nn.ModuleDict(mixtures)
         self.expert_order = list(self.mixtures.keys())
         self.mot_checkpoint_mixed_attn = mot_checkpoint_mixed_attn
+        self.mot_split_attention = bool(mot_split_attention)
         self.use_fixed_video_layers = (
             None if use_fixed_video_layers is None else int(use_fixed_video_layers)
         )
@@ -141,6 +143,17 @@ class MoT(nn.Module):
             )
         return shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp
 
+    @staticmethod
+    def _attention_groups(attention_mask: torch.Tensor):
+        """Group queries reading the same tokens, so each group needs no attention mask."""
+        patterns, group_of_query = torch.unique(attention_mask, dim=0, return_inverse=True)
+        groups = [
+            ((group_of_query == index).nonzero().squeeze(1), pattern.nonzero().squeeze(1))
+            for index, pattern in enumerate(patterns)
+        ]
+        restore_order = torch.argsort(torch.cat([queries for queries, _ in groups]))
+        return groups, restore_order
+
     def _mixed_attention(
         self,
         q_cat: torch.Tensor,
@@ -148,11 +161,24 @@ class MoT(nn.Module):
         v_cat: torch.Tensor,
         attention_mask: torch.Tensor,
         num_heads: Optional[int] = None,
+        attention_groups=None,
     ) -> torch.Tensor:
         attn_mask = attention_mask.to(device=q_cat.device)
         attention_heads = self.num_heads if num_heads is None else int(num_heads)
 
         def _forward(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor) -> torch.Tensor:
+            if attention_groups is not None:
+                groups, restore_order = attention_groups
+                parts = [
+                    flash_attention(
+                        q=q[:, queries],
+                        k=k[:, tokens],
+                        v=v[:, tokens],
+                        num_heads=attention_heads,
+                    )
+                    for queries, tokens in groups
+                ]
+                return torch.cat(parts, dim=1)[:, restore_order]
             return flash_attention(q=q, k=k, v=v, num_heads=attention_heads, ctx_mask=attn_mask)
 
         if self.mot_checkpoint_mixed_attn and self.training:
@@ -865,6 +891,9 @@ class MoT(nn.Module):
             return {"video": final_video_tokens, "action": final_action_tokens}
 
         tokens_all = {k: v for k, v in embeds_all.items()}
+        attention_groups = (
+            self._attention_groups(attention_mask) if self.mot_split_attention else None
+        )
 
         for layer_idx in range(self.num_layers):
             q_chunks = []
@@ -925,7 +954,11 @@ class MoT(nn.Module):
                 )
 
             mixed = self._mixed_attention(
-                q_cat=q_cat, k_cat=k_cat, v_cat=v_cat, attention_mask=attention_mask
+                q_cat=q_cat,
+                k_cat=k_cat,
+                v_cat=v_cat,
+                attention_mask=attention_mask,
+                attention_groups=attention_groups,
             )
 
             start = 0

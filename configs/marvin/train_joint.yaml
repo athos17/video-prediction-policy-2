@@ -177,6 +177,7 @@ model:
   load_text_encoder: false
   load_clip_encoder: true
   mot_checkpoint_mixed_attn: true
+  mot_split_attention: true
   action_chunk_size: 1
   action_visible_video_frames: 5
   video_lora:
