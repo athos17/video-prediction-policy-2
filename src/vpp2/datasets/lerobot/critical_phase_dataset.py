@@ -39,8 +39,9 @@ class CriticalPhaseVideoEventDataset(VideoEventDataset):
             raise ValueError(
                 "Critical phase requires step_uniform, explicit split, single video, and no padding retries"
             )
-        if "fps" not in self.metadata or not self.metadata.fps.eq(25).all():
-            raise ValueError("Critical phase requires verified 25 Hz metadata")
+        # The index manifest binds this rate through the temporal contract below.
+        if "fps" not in self.metadata or self.metadata.fps.nunique() != 1:
+            raise ValueError("Critical phase requires one verified frame rate in metadata")
         if not 1 <= int(critical_phase_prefix) <= self.action_horizon:
             raise ValueError("critical_phase_prefix must be within action horizon")
         contract = dict(
@@ -48,7 +49,7 @@ class CriticalPhaseVideoEventDataset(VideoEventDataset):
             stride=self.global_sample_stride,
             action_offset=self.action_time_offset,
             prefix=int(critical_phase_prefix),
-            fps=25,
+            fps=int(self.metadata.fps.iloc[0]),
         )
         self._critical_phase = CriticalPhaseIndex(
             critical_phase_index,

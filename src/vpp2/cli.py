@@ -292,6 +292,16 @@ def main():
     p.add_argument("--tasks", default="configs/robodojo/source_tasks.csv")
     p.add_argument("--workers", type=int, default=4)
     p.add_argument("--limit", type=int, help="Convert only the first N episodes for a smoke test")
+    p = sub.add_parser("marvin-convert", help="Cut Marvin LeRobot v3 data into subtask clips")
+    for name in ("source", "annotation", "output"):
+        p.add_argument("--" + name, required=True)
+    p.add_argument("--workers", type=int, default=16)
+    p.add_argument("--limit", type=int, help="Convert only the first N episodes for a smoke test")
+    p = sub.add_parser("marvin-prepare", help="Write Marvin prompts, split, stats and index")
+    for name in ("media-root", "output"):
+        p.add_argument("--" + name, required=True)
+    p.add_argument("--holdout", default="configs/marvin/holdout.json")
+    p.add_argument("--end-effector", default="robot hand")
     p = sub.add_parser("text-cache")
     p.add_argument("--data", required=True)
     p.add_argument("--wan", required=True)
@@ -357,6 +367,14 @@ def main():
         from .data import prepare
 
         result = prepare(args.metadata, args.media_root, args.stats, args.output, args.holdout)
+    elif args.command == "marvin-convert":
+        from .marvin_data import convert
+
+        result = convert(args.source, args.annotation, args.output, args.workers, args.limit)
+    elif args.command == "marvin-prepare":
+        from .marvin_data import prepare
+
+        result = prepare(args.media_root, args.holdout, args.output, args.end_effector)
     elif args.command == "text-cache":
         from .data import text_cache
 
