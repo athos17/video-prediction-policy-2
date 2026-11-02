@@ -1,7 +1,7 @@
 # Marvin joint Video + Action1B: 62-D [L EEF9, L hand22, R EEF9, R hand22], 32 actions at 30 Hz.
 # Steps are scaled to the much smaller dataset; pick the checkpoint on held-out metrics.
 output_dir: runs/marvin/joint
-batch_size: 9
+batch_size: 2
 num_workers: 8
 lr_scheduler_type: cosine
 learning_rate: 0.0001
@@ -16,6 +16,7 @@ lr_tail:
 log_every: 10
 save_every: 2500
 save_final_checkpoint: true
+keep_last_states: 2
 eval_every: 1000
 eval_num_inference_steps: 10
 train_mode: joint
@@ -247,5 +248,5 @@ paths:
   action_init: weights/init/action1b_marvin.pt
   data: data/marvin/prepared
   media: data/marvin/media
-reference_global_batch_size: 288
+reference_global_batch_size: 64
 reference_history_stride: 30

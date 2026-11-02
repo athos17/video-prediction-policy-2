@@ -12,6 +12,7 @@ max_steps: 10000
 log_every: 10
 save_every: 1000
 save_final_checkpoint: true
+keep_last_states: 2
 eval_every: 0
 eval_num_inference_steps: 10
 train_mode: video_only

@@ -5,6 +5,7 @@ import inspect
 import math
 import os
 import re
+import shutil
 from math import ceil
 from pathlib import Path
 import time
@@ -80,6 +81,10 @@ class JointTrainer:
         self.log_every = int(cfg.log_every)
         self.save_every = int(cfg.save_every)
         self.save_final_checkpoint = bool(cfg.get("save_final_checkpoint", True))
+        keep_last_states = cfg.get("keep_last_states")
+        self.keep_last_states = None if keep_last_states is None else int(keep_last_states)
+        if self.keep_last_states is not None and self.keep_last_states < 1:
+            raise ValueError("`keep_last_states` must be positive when set.")
         if self.preflight is not None and (not self.save_final_checkpoint):
             raise ValueError("Preflight runs require `save_final_checkpoint=true`.")
         self.eval_every = int(cfg.eval_every)
@@ -693,8 +698,18 @@ class JointTrainer:
         self.accelerator.save_state(output_dir=state_path)
         if self.accelerator.is_main_process:
             self._save_trainer_state(state_path)
+            self._prune_old_states()
         self.accelerator.wait_for_everyone()
         return {"weights_path": ckpt_path, "state_path": state_path}
+
+    def _prune_old_states(self):
+        """Full states exceed 200 GB; weights stay for checkpoint selection."""
+        if self.keep_last_states is None:
+            return
+        states = sorted(Path(self.state_dir).glob("step_*"))
+        for stale in states[: -self.keep_last_states]:
+            shutil.rmtree(stale)
+            logger.info("Removed old training state %s", stale)
 
     def _save_once(self, step):
         step = int(step)
