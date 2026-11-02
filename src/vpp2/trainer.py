@@ -136,6 +136,10 @@ class JointTrainer:
                 f"Unsupported mixed_precision: {cfg.mixed_precision}. Expected one of: ['no', 'fp16', 'bf16']."
             )
         self.wandb_enabled = bool(cfg.wandb.enabled)
+        if cfg.get("memoize_deepspeed_used_params", False):
+            from vpp2.utils import deepspeed_patches
+
+            deepspeed_patches.install()
         with self.profiler.measure_startup("accelerator_init_ms", cuda=True):
             self.accelerator = Accelerator(
                 gradient_accumulation_steps=self.gradient_accumulation_steps,

@@ -25,6 +25,7 @@ optimizer_betas:
 checkpoint_mode: full
 gradient_accumulation_steps: 1
 mixed_precision: bf16
+memoize_deepspeed_used_params: true
 seed: 100008
 max_grad_norm: 1.0
 weight_decay: 0.01
