@@ -36,8 +36,8 @@ def load_config(path, overrides=()):
         m.action_dit_config.hidden_dim,
         m.action_dit_config.ffn_dim,
         m.action_dit_config.num_layers,
-    ) != (1024, 4096, 40):
-        raise ValueError("Expected the reference Action2B architecture")
+    ) not in {(1024, 4096, 40), (512, 2048, 40)}:
+        raise ValueError("Expected the reference Action2B or Action1B architecture")
     if m.get("joint_denoising", False) or m.video_lora.enabled:
         raise ValueError("Joint denoising and LoRA are not part of this release")
     stride = cfg.get("reference_history_stride", 25)
@@ -90,9 +90,9 @@ def train(args):
     else:
         summary.update(
             action_initializer=str(cfg.model.action_dit_pretrained_path),
-            action_hidden=1024,
-            action_ffn=4096,
-            layers=40,
+            action_hidden=int(cfg.model.action_dit_config.hidden_dim),
+            action_ffn=int(cfg.model.action_dit_config.ffn_dim),
+            layers=int(cfg.model.action_dit_config.num_layers),
             training_action_shift=float(cfg.model.action_scheduler.train_shift),
             validation_action_shift=float(cfg.model.action_scheduler.infer_shift),
             benchmark_action_shift=1,

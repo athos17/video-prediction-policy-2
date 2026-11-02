@@ -107,8 +107,8 @@ def deployment_config(cfg):
 
 def export(checkpoint, config, stats, output, step):
     cfg = OmegaConf.load(config)
-    if cfg.train_mode != "joint" or cfg.model.action_dit_config.hidden_dim != 1024:
-        raise ValueError("Expected the joint + Action2B training configuration")
+    if cfg.train_mode != "joint" or cfg.model.action_dit_config.hidden_dim not in {512, 1024}:
+        raise ValueError("Expected the joint + Action2B or Action1B training configuration")
     source = torch.load(checkpoint, map_location="cpu", mmap=True, weights_only=True)
     if int(source.get("step", -1)) != step or "mot" not in source:
         raise ValueError("Full checkpoint step/format mismatch")

@@ -1,4 +1,4 @@
-# Marvin joint Video + Action2B: 62-D [L EEF9, L hand22, R EEF9, R hand22], 32 actions at 30 Hz.
+# Marvin joint Video + Action1B: 62-D [L EEF9, L hand22, R EEF9, R hand22], 32 actions at 30 Hz.
 # Steps are scaled to the much smaller dataset; pick the checkpoint on held-out metrics.
 output_dir: runs/marvin/joint
 batch_size: 9
@@ -205,8 +205,8 @@ model:
     video_attention_mask_mode: bidirectional
   action_dit_config:
     action_dim: 62
-    hidden_dim: 1024
-    ffn_dim: 4096
+    hidden_dim: 512
+    ffn_dim: 2048
     num_layers: 40
     num_heads: 40
     attn_head_dim: 128
@@ -242,7 +242,7 @@ joint_learning_rates:
 paths:
   wan: weights/checkpoints/Wan2.1-I2V-14B-480P
   video_init: runs/marvin/video/checkpoints/weights/step_010000.pt
-  action_init: weights/init/action2b_marvin.pt
+  action_init: weights/init/action1b_marvin.pt
   data: data/marvin/prepared
   media: data/marvin/media
 reference_global_batch_size: 288
