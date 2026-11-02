@@ -2,7 +2,7 @@
 # 7 past frames + current + subtask anchor = 9 conditioning RGB frames, 16 future frames.
 # Held-out episodes stay out of this stage so they can judge instruction following.
 output_dir: runs/marvin/video
-batch_size: 26
+batch_size: 4
 num_workers: 8
 lr_scheduler_type: cosine
 learning_rate: 5.0e-06
@@ -158,5 +158,5 @@ paths:
   video_init: weights/checkpoints_video/vpp2-video-stage2-17f.pth
   data: data/marvin/prepared
   media: data/marvin/media
-reference_global_batch_size: 832
+reference_global_batch_size: 128
 reference_history_stride: 30
