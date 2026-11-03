@@ -1,0 +1,526 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VPP2 Gate 1 权重对比</title>
+<style>
+/* Layout: a window rail beside rows of videos, one row per instruction and one column per checkpoint. */
+:root {
+  --bg: #eef1f2; --surface: #fbfcfc; --sunken: #e2e7e9; --fg: #16201f; --muted: #58686a; --line: #cdd5d7;
+  --accent: #0b6e69; --accent-fg: #ffffff; --left: #1d5fa8; --right: #b4530f; --good: #1b7a45; --bad: #b3322d; --video: #0d1213;
+  --sans: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", system-ui, sans-serif;
+  --mono: "SFMono-Regular", Menlo, Consolas, "DejaVu Sans Mono", "Noto Sans CJK SC", monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root {
+  --bg: #111718; --surface: #182021; --sunken: #0c1112; --fg: #e6ecec; --muted: #94a5a6; --line: #2d3a3c;
+  --accent: #4cc0b7; --accent-fg: #06201e; --left: #7db4ee; --right: #ef9f61; --good: #5fce8d; --bad: #f08a84; --video: #050808; color-scheme: dark;
+} }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.55 var(--sans); }
+button, select, input { font: inherit; color: inherit; }
+button:focus-visible, select:focus-visible, input:focus-visible, canvas:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.app { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 20px; padding: 0 16px 32px; }
+.rail { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: 10px; padding-block: 14px 10px; min-width: 0; }
+.filters { display: grid; grid-template-columns: 1fr 1.4fr; gap: 8px; }
+.filters label, .picker { display: grid; gap: 2px; font-size: 12px; color: var(--muted); min-width: 0; }
+select { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 4px 6px; width: 100%; min-width: 0; color: var(--fg); font-size: 14px; }
+.list { overflow-y: auto; flex: 1; border-top: 1px solid var(--line); padding-right: 4px; }
+.group { position: sticky; top: 0; background: var(--bg); padding: 8px 6px 3px; font-size: 12px; color: var(--muted); display: grid; grid-template-columns: minmax(0, 1fr) var(--marks); align-items: baseline; }
+.group b { color: var(--fg); font-weight: 600; }
+.marks { display: grid; grid-template-columns: repeat(var(--n), 20px); text-align: center; font-variant-numeric: tabular-nums; }
+.case { display: grid; grid-template-columns: 30px 8px minmax(0, 1fr) var(--marks); gap: 0 6px; align-items: baseline; width: 100%; padding: 3px 6px; text-align: left; background: none; border: 0; border-radius: 4px; cursor: pointer; font-size: 13px; line-height: 1.35; }
+.case:hover { background: var(--sunken); }
+.case[aria-current="true"] { background: var(--accent); color: var(--accent-fg); }
+.case[aria-current="true"] .seg, .case[aria-current="true"] .yes, .case[aria-current="true"] .no { color: inherit; }
+.case[aria-current="true"] .dot { background: currentColor; }
+.seg { font: 12px var(--mono); color: var(--muted); }
+.dot { width: 8px; height: 8px; border-radius: 50%; align-self: center; }
+.dot.left, .hand.left::before { background: var(--left); }
+.dot.right, .hand.right::before { background: var(--right); }
+.yes { color: var(--good); font-weight: 600; } .no { color: var(--bad); font-weight: 600; }
+.legend { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.5; }
+.legend .l { color: var(--left); } .legend .r { color: var(--right); }
+.main { min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+header { display: flex; flex-wrap: wrap; gap: 8px 32px; justify-content: space-between; align-items: flex-start; padding-top: 14px; }
+h1 { font-size: 20px; margin: 0; font-weight: 700; text-wrap: balance; }
+.intro { margin: 4px 0 0; max-width: 78ch; color: var(--muted); }
+details.metrics { border-top: 1px solid var(--line); padding-top: 8px; }
+details.metrics summary { cursor: pointer; font-weight: 600; font-size: 13px; }
+.tables { display: flex; flex-wrap: wrap; gap: 12px 40px; margin-top: 8px; }
+.table-wrap { overflow-x: auto; min-width: 0; }
+caption { text-align: left; font-size: 12px; color: var(--muted); padding-bottom: 4px; }
+table { border-collapse: collapse; font-size: 13px; }
+th, td { padding: 2px 12px 2px 0; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+th { font-weight: 500; color: var(--muted); border-bottom: 1px solid var(--line); }
+th:first-child, td:first-child { text-align: left; }
+tr.chance td { color: var(--muted); border-top: 1px solid var(--line); }
+.transport { position: sticky; top: 0; z-index: 5; background: var(--bg); display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding-block: 8px; border-block: 1px solid var(--line); }
+.btn { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 4px 10px; cursor: pointer; white-space: nowrap; }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); min-width: 62px; font-weight: 500; }
+.scrub { display: flex; align-items: center; gap: 10px; flex: 1 1 240px; min-width: 200px; }
+.scrub input { flex: 1; min-width: 0; accent-color: var(--accent); }
+.clock { font: 13px var(--mono); white-space: nowrap; }
+.toggle { display: inline-flex; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+.toggle button { background: var(--surface); border: 0; border-left: 1px solid var(--line); padding: 4px 9px; cursor: pointer; white-space: nowrap; }
+.toggle button:first-child { border-left: 0; }
+.toggle button[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); }
+.ctl { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.ctl select { width: auto; }
+.ctl .toggle { font-size: 14px; color: var(--fg); }
+.status { font-size: 12px; color: var(--muted); } .status.error { color: var(--bad); }
+.window { display: flex; flex-wrap: wrap; gap: 2px 16px; font-size: 13px; color: var(--muted); }
+.window strong { color: var(--fg); font-weight: 600; }
+.cand { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.cand + .cand { border-top: 1px solid var(--line); padding-top: 12px; }
+.cands { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.cand-head { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; font-size: 12px; }
+.kind { font-weight: 600; padding: 0 6px; border-radius: 3px; border: 1px solid var(--line); }
+.kind.demo { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.hand { display: inline-flex; align-items: center; gap: 5px; font-weight: 500; }
+.hand::before { content: ""; width: 8px; height: 8px; border-radius: 50%; }
+h3 { margin: 0; font-size: 15px; font-weight: 500; line-height: 1.4; overflow-wrap: anywhere; }
+.prompt { margin: 0; font: 12.5px/1.5 var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+.prompt mark { background: none; color: var(--fg); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
+.tiles { display: grid; grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); gap: 8px; }
+figure { margin: 0; min-width: 0; display: grid; gap: 2px; align-content: start; }
+canvas { display: block; width: 100%; aspect-ratio: 416 / 240; background: var(--video); border-radius: 3px; }
+figure.tile canvas { cursor: zoom-in; }
+figure.best canvas { outline: 3px solid var(--accent); outline-offset: -3px; }
+figcaption { font: 12px var(--mono); color: var(--muted); display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0 8px; }
+figure.best figcaption { color: var(--fg); font-weight: 600; }
+dialog { width: min(1500px, 96vw); max-height: 94vh; background: var(--surface); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 14px; }
+dialog::backdrop { background: rgb(0 0 0 / 0.6); }
+.zoom-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
+.zoom-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.notes { margin: 8px 0 0; padding: 12px 0 0 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; max-width: 96ch; display: grid; gap: 4px; }
+.picker { display: none; }
+@media (max-width: 1100px) { .tiles { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); } }
+@media (max-width: 860px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .rail { display: none; }
+  .picker { display: grid; }
+  .transport { position: static; }
+  .zoom-grid { grid-template-columns: minmax(0, 1fr); }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="rail" aria-label="选择窗口">
+    <div class="filters">
+      <label for="f-episode">Episode<select id="f-episode"></select></label>
+      <label for="f-result">训练后权重的结果<select id="f-result">
+        <option value="all">全部窗口</option>
+        <option value="split">判断不一致</option>
+        <option value="yes">都选中示教指令</option>
+        <option value="no">都没选中示教指令</option>
+      </select></label>
+    </div>
+    <div class="list" id="list"></div>
+    <p class="legend">每列是一个权重。✓ 示教指令生成的视频最接近真实，✗ 其他指令更接近。圆点是示教手：<span class="l">蓝</span>左手，<span class="r">橙</span>右手。</p>
+  </aside>
+  <main class="main">
+    <header>
+      <div>
+        <h1>VPP2 Gate 1 权重对比</h1>
+        <p class="intro">留出集 6 个 episode 的子任务窗口。每个窗口输入相同的历史画面，换不同语言指令生成未来 2.13 秒，再和真实视频对比。同一种子下所有指令和权重的噪声种子相同。</p>
+      </div>
+      <span class="ctl">窗口位置<span class="toggle" id="phase-ctl" role="group" aria-label="窗口位置"></span></span>
+    </header>
+    <details class="metrics" open>
+      <summary>汇总指标</summary>
+      <div class="tables" id="tables"></div>
+    </details>
+    <label class="picker" for="case-select">窗口<select id="case-select"></select></label>
+    <div class="transport">
+      <button class="btn primary" id="play" type="button">暂停</button>
+      <button class="btn" id="prev" type="button" title="快捷键 K">上一个</button>
+      <button class="btn" id="next" type="button" title="快捷键 J">下一个</button>
+      <div class="scrub">
+        <input id="frame" type="range" min="0" max="16" value="0" aria-label="帧">
+        <span class="clock" id="clock"></span>
+      </div>
+      <label class="ctl" for="speed">速度<select id="speed"><option value="1">1× 实时</option><option value="0.5" selected>0.5×</option><option value="0.25">0.25×</option></select></label>
+      <span class="ctl">权重<span class="toggle" id="model-ctl" role="group" aria-label="显示哪些权重"></span></span>
+      <span class="ctl">种子<span class="toggle" id="seed-ctl" role="group" aria-label="种子"></span></span>
+      <span class="status" id="status" role="status"></span>
+    </div>
+    <div class="window" id="window"></div>
+    <section class="cands" id="cands" aria-label="各条指令的生成结果"></section>
+    <ol class="notes" id="notes"></ol>
+  </main>
+</div>
+<dialog id="zoom" aria-label="放大对比">
+  <div class="zoom-head">
+    <div><h3 id="zoom-title"></h3><div class="status" id="zoom-sub"></div></div>
+    <button class="btn" id="zoom-close" type="button">关闭</button>
+  </div>
+  <div class="zoom-grid">
+    <figure><canvas id="zoom-gt" width="416" height="240" aria-label="真实视频"></canvas><figcaption><span>真实视频</span></figcaption></figure>
+    <figure><canvas id="zoom-gen" width="416" height="240" aria-label="生成视频"></canvas><figcaption id="zoom-caption"></figcaption></figure>
+  </div>
+</dialog>
+
+<script>
+const W = 416, H = 240, GT_ROW = 3, FRAMES = 17, FPS = 7.5, NATIVE_PER_FRAME = 4, NATIVE_FPS = 30, HORIZON = 64;
+const HAND = { left: "左手", right: "右手" };
+const NOTES = {
+  p50: [
+    "窗口从子任务开始到抓取的中点取起，手臂通常已经在动。历史画面已经透露了用哪只手，有时也透露了目标，所以预训练权重的分数也不低。这一页要和预训练权重比，不能只和机会水平比。",
+    "手臂已经在动时，换另一只手的指令多半改变不了动作，这种差异小不一定是模型没读懂指令。",
+  ],
+  p0: [
+    "窗口从子任务起点取起。长 episode 里这时上一只手常常还在收回，也可能有人入镜，指令要做的动作不一定在 2.13 秒内出现。",
+    "这一组只生成了预训练和 3000 步，没有 1000 和 4000 步。",
+  ],
+};
+const SHARED_NOTES = [
+  "候选是这个 episode 里此后还会抓取的物体，每个窗口最多 3 条，第一条是示教指令。这些物体此刻不一定已经在桌上。",
+  "粗框标出每个权重下最接近真实的指令，按两个种子的平均 L1 判定。L1 是生成和真实视频未来 16 帧整张画面的平均像素距离（0–255），按未压缩帧计算。它只反映像素相似度，不等于指令跟随正确。",
+  "采样 30 步，无 CFG；策略默认 10 步，这里的画面不能直接代表部署效果。第 0 帧是当前帧，之前 8 帧历史没有显示。网页视频经过压缩，细节略有损失。",
+  "这些都是离线指标，不代表真机效果。",
+];
+const $ = (id) => document.getElementById(id);
+const state = { phase: null, id: null, frame: 0, playing: !matchMedia("(prefers-reduced-motion: reduce)").matches, seed: 0, hidden: new Set(), hold: 0, filtered: [] };
+const store = new Map();
+let DATA, tiles = [], zoomTiles = [], timer = null;
+
+const esc = (s) => String(s).replace(/[&<>"]/g, (x) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[x]));
+const pct = (x) => x.toFixed(2);
+const pad = (n) => String(n).padStart(3, "0");
+const phase = () => DATA.phases.find((p) => p.id === state.phase);
+const current = () => phase().cases.find((c) => c.id === state.id);
+const shown = () => phase().models.filter((m) => !state.hidden.has(m));
+const seeds = () => (state.seed === "both" ? [0, 1] : [state.seed]);
+const key = (id, seed) => `${id}_s${seed}`;
+const trained = () => phase().models.filter((m) => m !== "init");
+
+function once(target, event) {
+  return new Promise((resolve, reject) => {
+    const finish = (fn, arg) => { clearTimeout(t); target.removeEventListener(event, ok); target.removeEventListener("error", bad); fn(arg); };
+    const ok = () => finish(resolve);
+    const bad = () => finish(reject, new Error("decode"));
+    const t = setTimeout(() => finish(reject, new Error("timeout")), 30000);
+    target.addEventListener(event, ok); target.addEventListener("error", bad);
+  });
+}
+
+async function extract(entry, src) {
+  const video = document.createElement("video");
+  video.muted = true; video.playsInline = true; video.preload = "auto"; video.src = src;
+  try {
+    await once(video, "loadeddata");
+    for (let i = 0; i < FRAMES && !entry.cancelled; i++) {
+      const target = (i + 0.5) / FPS;
+      video.currentTime = target;
+      await once(video, "seeked");
+      if (Math.abs(video.currentTime - target) > 0.01) throw new Error("seek");
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+      canvas.getContext("2d").drawImage(video, 0, 0);
+      entry.frames[i] = canvas; entry.count = i + 1;
+      if (i === state.frame) draw();
+      showStatus();
+    }
+  } finally {
+    video.removeAttribute("src"); video.load();
+  }
+}
+
+async function decode(name) {
+  const entry = { frames: [], cancelled: false, failed: false, count: 0 };
+  store.set(name, entry);
+  const url = `videos/${name}.mp4`;
+  // Download first: a video that is still streaming may refuse to seek, which would freeze every frame.
+  let blobUrl = null;
+  try {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error("fetch");
+    blobUrl = URL.createObjectURL(await response.blob());
+    await extract(entry, blobUrl);
+  } catch (first) {
+    try { await extract(entry, url); }
+    catch (second) { entry.failed = true; showStatus(); }
+  }
+  if (blobUrl) URL.revokeObjectURL(blobUrl);
+}
+
+function ensureDecoded() {
+  for (const [name, entry] of store) {
+    if (!name.startsWith(`${state.id}_s`)) { entry.cancelled = true; store.delete(name); }
+  }
+  for (const seed of seeds()) {
+    const name = key(state.id, seed);
+    if (!store.has(name)) decode(name);
+  }
+  showStatus();
+}
+
+function showStatus() {
+  const entries = seeds().map((seed) => store.get(key(state.id, seed))).filter(Boolean);
+  const failed = entries.some((e) => e.failed);
+  const done = entries.reduce((sum, e) => sum + e.count, 0), total = FRAMES * seeds().length;
+  const el = $("status");
+  el.classList.toggle("error", failed);
+  el.textContent = failed ? "视频加载失败，换一个窗口或刷新页面重试。" : done < total ? `加载 ${done}/${total}` : "";
+}
+
+function draw() {
+  const k = state.frame;
+  $("frame").value = k;
+  $("clock").textContent = `帧 ${String(k).padStart(2, "0")}/16  +${(k * NATIVE_PER_FRAME / NATIVE_FPS).toFixed(2)} s`;
+  for (const tile of tiles.concat(zoomTiles)) {
+    const entry = store.get(key(state.id, tile.seed));
+    const source = entry && entry.frames[k];
+    if (source) tile.ctx.drawImage(source, tile.x, tile.y, W, H, 0, 0, W, H);
+  }
+}
+
+function makeTile(row, caption, attrs, tile) {
+  const figure = document.createElement("figure");
+  const canvas = document.createElement("canvas");
+  canvas.width = W; canvas.height = H;
+  canvas.setAttribute("aria-label", attrs);
+  const text = document.createElement("figcaption");
+  text.innerHTML = caption;
+  figure.append(canvas, text); row.append(figure);
+  tiles.push({ ctx: canvas.getContext("2d"), x: tile.x, y: tile.y, seed: tile.seed });
+  return { figure, canvas };
+}
+
+function renderStage() {
+  const c = current(), p = phase(), models = shown();
+  const inWindow = c.grasp <= c.step + HORIZON;
+  $("window").innerHTML = `<span><strong>episode ${c.episode}，seg ${pad(c.seg)}</strong></span>
+    <span>当前在子任务第 ${c.step} 帧，窗口看到第 ${c.step + HORIZON} 帧</span>
+    <span>抓取在第 ${c.grasp} 帧（${inWindow ? "窗口之内" : "窗口之后"}）</span>`;
+  const host = $("cands");
+  host.textContent = "";
+  tiles = [];
+  c.candidates.forEach((cand, i) => {
+    const block = document.createElement("article");
+    block.className = "cand";
+    const prompt = esc(cand.prompt).replace(esc(cand.object), (x) => `<mark>${x}</mark>`);
+    block.innerHTML = `<div class="cand-head"><span class="kind ${i === 0 ? "demo" : ""}">${i === 0 ? "示教指令" : "反事实指令"}</span><span class="hand ${cand.hand}">${HAND[cand.hand]}</span></div>
+      <h3>${esc(cand.instruction)}</h3><p class="prompt">Prompt: ${prompt}</p>`;
+    const row = document.createElement("div");
+    row.className = "tiles";
+    row.style.setProperty("--cols", models.length + 1);
+    for (const seed of seeds()) {
+      makeTile(row, `<span>真实视频</span>`, "真实视频", { x: 0, y: GT_ROW * H, seed });
+      for (const m of models) {
+        const best = c.closest[m] === i;
+        const { figure, canvas } = makeTile(row,
+          `<span>${DATA.labels[m]} · 种 ${seed}</span><span>${best ? "最接近 " : ""}L1 ${cand.l1[m][seed].toFixed(1)}</span>`,
+          `${DATA.labels[m]} 种子 ${seed}：${cand.instruction}。点击放大`,
+          { x: p.models.indexOf(m) * W, y: i * H, seed });
+        figure.classList.add("tile");
+        figure.classList.toggle("best", best);
+        canvas.tabIndex = 0;
+        const zoom = () => openZoom(cand, i, m, seed);
+        canvas.addEventListener("click", zoom);
+        canvas.addEventListener("keydown", (e) => { if (e.key === "Enter") zoom(); });
+      }
+    }
+    block.append(row);
+    host.append(block);
+  });
+  draw();
+}
+
+function openZoom(cand, i, m, seed) {
+  const p = phase();
+  $("zoom-title").textContent = cand.instruction;
+  $("zoom-sub").textContent = i === 0 ? "示教指令" : "反事实指令";
+  $("zoom-caption").innerHTML = `<span>${DATA.labels[m]} · 种子 ${seed}</span><span>L1 ${cand.l1[m][seed].toFixed(1)}</span>`;
+  zoomTiles = [
+    { ctx: $("zoom-gt").getContext("2d"), x: 0, y: GT_ROW * H, seed },
+    { ctx: $("zoom-gen").getContext("2d"), x: p.models.indexOf(m) * W, y: i * H, seed },
+  ];
+  $("zoom").showModal();
+  draw();
+}
+
+function renderTables() {
+  const s = DATA.scores, p = phase();
+  const scoreRows = s.models.map((m) => `<tr><td>${DATA.labels[m]}</td><td>${pct(s.values[m].top1)}</td><td>${pct(s.values[m].object_top1)}</td><td>${pct(s.values[m].hand_top1)}</td></tr>`).join("");
+  const refer = p.metrics[p.models[0]];
+  const genRows = p.models.map((m) => { const x = p.metrics[m]; return `<tr><td>${DATA.labels[m]}</td><td>${pct(x.closest)}</td><td>${pct(x.object)}</td><td>${pct(x.hand)}</td><td>${x.l1.toFixed(1)}</td></tr>`; }).join("");
+  $("tables").innerHTML = `<div class="table-wrap"><table><caption>打分：真实未来视频下，示教指令的去噪误差是否最小（${s.cases} 个窗口，phase 0 和 0.5 各一半）</caption>
+      <thead><tr><th>权重</th><th>选对指令</th><th>同手选对物体</th><th>选对手</th></tr></thead>
+      <tbody>${scoreRows}<tr class="chance"><td>机会水平</td><td>${pct(s.chance.top1)}</td><td>${pct(s.chance.object_top1)}</td><td>${pct(s.chance.hand_top1)}</td></tr></tbody></table></div>
+    <div class="table-wrap"><table><caption>生成：${p.label}，${refer.cases} 个窗口，示教指令生成的视频是否最接近真实</caption>
+      <thead><tr><th>权重</th><th>最接近真实</th><th>只比同手</th><th>选对手</th><th>示教 L1</th></tr></thead>
+      <tbody>${genRows}<tr class="chance"><td>机会水平</td><td>${pct(refer.closest_chance)}</td><td>${pct(refer.object_chance)}</td><td>${pct(refer.hand_chance)}</td><td>–</td></tr></tbody></table></div>`;
+  $("notes").innerHTML = NOTES[state.phase].concat(SHARED_NOTES).map((n) => `<li>${esc(n)}</li>`).join("");
+}
+
+function renderList() {
+  const p = phase(), episode = $("f-episode").value, result = $("f-result").value, later = trained();
+  state.filtered = p.cases.filter((c) => {
+    if (episode !== "all" && c.episode !== +episode) return false;
+    const hits = later.filter((m) => c.closest[m] === 0).length;
+    if (result === "yes") return hits === later.length;
+    if (result === "no") return hits === 0;
+    if (result === "split") return hits > 0 && hits < later.length;
+    return true;
+  });
+  const list = $("list"), select = $("case-select");
+  list.textContent = ""; select.textContent = "";
+  list.style.setProperty("--n", p.models.length);
+  list.style.setProperty("--marks", `${p.models.length * 20}px`);
+  const groups = new Map();
+  for (const c of state.filtered) { if (!groups.has(c.episode)) groups.set(c.episode, []); groups.get(c.episode).push(c); }
+  for (const [ep, items] of groups) {
+    const head = document.createElement("div");
+    head.className = "group";
+    head.innerHTML = `<b>Episode ${ep}</b><span class="marks">${p.models.map((m) => `<span title="${DATA.labels[m]}">${DATA.short[m]}</span>`).join("")}</span>`;
+    list.append(head);
+    for (const c of items) {
+      const first = c.candidates[0];
+      const marks = p.models.map((m) => (c.closest[m] === 0
+        ? `<span class="yes" title="${DATA.labels[m]}：示教指令最接近">✓</span>`
+        : `<span class="no" title="${DATA.labels[m]}：其他指令更接近">✗</span>`)).join("");
+      const button = document.createElement("button");
+      button.type = "button"; button.className = "case"; button.dataset.id = c.id;
+      button.innerHTML = `<span class="seg">${pad(c.seg)}</span><span class="dot ${first.hand}"></span><span>${esc(first.object)}</span><span class="marks">${marks}</span>`;
+      button.addEventListener("click", () => openCase(c.id));
+      list.append(button);
+      const option = document.createElement("option");
+      option.value = c.id; option.textContent = `ep${c.episode} seg${pad(c.seg)} ${HAND[first.hand]} ${first.object}`;
+      select.append(option);
+    }
+  }
+  if (!state.filtered.length) list.insertAdjacentHTML("beforeend", `<p class="legend" style="padding:8px 6px">没有符合条件的窗口，换一个筛选条件。</p>`);
+  markCurrent();
+}
+
+function markCurrent() {
+  document.querySelectorAll(".case").forEach((b) => {
+    const on = b.dataset.id === state.id;
+    b.setAttribute("aria-current", on ? "true" : "false");
+    if (on) b.scrollIntoView({ block: "nearest" });
+  });
+  if (state.filtered.some((c) => c.id === state.id)) $("case-select").value = state.id;
+}
+
+function openCase(id) {
+  const owner = DATA.phases.find((p) => p.cases.some((c) => c.id === id));
+  if (!owner) return;
+  if ($("zoom").open) $("zoom").close();
+  const changed = state.phase !== owner.id;
+  state.phase = owner.id; state.id = id; state.frame = 0; state.hold = 0;
+  if (changed) { renderPhaseControls(); renderTables(); renderList(); }
+  ensureDecoded(); renderStage(); markCurrent();
+  history.replaceState(null, "", `#${id}`);
+}
+
+function move(delta) {
+  const list = state.filtered.length ? state.filtered : phase().cases;
+  const at = list.findIndex((c) => c.id === state.id);
+  openCase(list[(at + delta + list.length) % list.length].id);
+}
+
+function tick() {
+  const ready = seeds().every((seed) => { const e = store.get(key(state.id, seed)); return e && e.count === FRAMES; });
+  if (!state.playing || !ready) return;
+  if (state.frame === FRAMES - 1 && state.hold < 3) { state.hold++; return; }
+  state.hold = 0; state.frame = (state.frame + 1) % FRAMES; draw();
+}
+function restartTimer() { clearInterval(timer); timer = setInterval(tick, 1000 / (FPS * +$("speed").value)); }
+function setPlaying(on) { state.playing = on; $("play").textContent = on ? "暂停" : "播放"; }
+function step(delta) { setPlaying(false); state.frame = (state.frame + delta + FRAMES) % FRAMES; draw(); }
+
+function renderPhaseControls() {
+  const phases = $("phase-ctl"), models = $("model-ctl");
+  if (!shown().length) state.hidden.clear();
+  phases.textContent = "";
+  for (const p of DATA.phases) {
+    const button = document.createElement("button");
+    button.type = "button"; button.textContent = p.label;
+    button.setAttribute("aria-pressed", String(p.id === state.phase));
+    button.addEventListener("click", () => {
+      if (p.id === state.phase) return;
+      const c = current();
+      const same = p.cases.find((x) => x.episode === c.episode && x.seg === c.seg);
+      openCase((same || p.cases[0]).id);
+    });
+    phases.append(button);
+  }
+  models.textContent = "";
+  for (const m of phase().models) {
+    const button = document.createElement("button");
+    button.type = "button"; button.textContent = DATA.labels[m];
+    button.setAttribute("aria-pressed", String(!state.hidden.has(m)));
+    button.addEventListener("click", () => {
+      if (!state.hidden.has(m) && shown().length === 1) return;
+      if (state.hidden.has(m)) state.hidden.delete(m); else state.hidden.add(m);
+      button.setAttribute("aria-pressed", String(!state.hidden.has(m)));
+      renderStage();
+    });
+    models.append(button);
+  }
+}
+
+function setupSeeds() {
+  const host = $("seed-ctl");
+  for (const [value, text] of [[0, "0"], [1, "1"], ["both", "两个"]]) {
+    const button = document.createElement("button");
+    button.type = "button"; button.textContent = text;
+    button.setAttribute("aria-pressed", String(state.seed === value));
+    button.addEventListener("click", () => {
+      state.seed = value;
+      host.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+      ensureDecoded(); renderStage();
+    });
+    host.append(button);
+  }
+}
+
+function setupEvents() {
+  $("f-episode").addEventListener("change", renderList);
+  $("f-result").addEventListener("change", renderList);
+  $("case-select").addEventListener("change", (e) => openCase(e.target.value));
+  $("play").addEventListener("click", () => setPlaying(!state.playing));
+  $("prev").addEventListener("click", () => move(-1));
+  $("next").addEventListener("click", () => move(1));
+  $("frame").addEventListener("input", (e) => { setPlaying(false); state.frame = +e.target.value; draw(); });
+  $("speed").addEventListener("change", restartTimer);
+  $("zoom-close").addEventListener("click", () => $("zoom").close());
+  $("zoom").addEventListener("close", () => { zoomTiles = []; });
+  window.addEventListener("hashchange", () => openCase(location.hash.slice(1)));
+  document.addEventListener("keydown", (e) => {
+    if (e.target.matches("select, input")) return;
+    const inZoom = $("zoom").open;
+    if (e.key === " ") {
+      if (e.target.matches("button") && !inZoom) return;
+      e.preventDefault(); setPlaying(!state.playing);
+    } else if (e.key === "ArrowLeft") step(-1);
+    else if (e.key === "ArrowRight") step(1);
+    else if (e.key === "j" && !inZoom) move(1);
+    else if (e.key === "k" && !inZoom) move(-1);
+  });
+}
+
+async function start() {
+  const response = await fetch("data.json");
+  if (!response.ok) throw new Error(`data.json ${response.status}`);
+  DATA = await response.json();
+  const episodes = [...new Set(DATA.phases[0].cases.map((c) => c.episode))];
+  $("f-episode").innerHTML = `<option value="all">全部</option>` + episodes.map((e) => `<option value="${e}">${e}</option>`).join("");
+  setupSeeds(); setupEvents(); setPlaying(state.playing); restartTimer();
+  const wanted = location.hash.slice(1);
+  const known = DATA.phases.some((p) => p.cases.some((c) => c.id === wanted));
+  openCase(known ? wanted : "ep085_seg005_p050");
+}
+start().catch((error) => {
+  $("status").classList.add("error");
+  $("status").textContent = `数据加载失败：${error.message}。确认 data.json 和页面在同一目录，再刷新页面。`;
+});
+</script>
+</body>
+</html>
