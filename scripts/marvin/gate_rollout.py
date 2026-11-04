@@ -424,8 +424,8 @@ def site(args):
     videos = args.site / "videos"
     videos.mkdir(parents=True, exist_ok=True)
     truth_directory = args.output / "truth"
-    worlds = sorted(path.name[len("rollout_") :] for path in args.output.glob("rollout_*")
-                    if path.is_dir() and path.name != "rollout_real")
+    worlds = sorted(path.name[len("rollout_") : -len("_cases.json")] for path in args.output.glob("rollout_*_cases.json")
+                    if path.name != "rollout_real_cases.json")
     rows = {world: {row["case"]: row for row in json.loads((args.output / f"rollout_{world}_cases.json").read_text())}
             for world in worlds}
     cases = []
