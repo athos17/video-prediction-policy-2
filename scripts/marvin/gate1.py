@@ -69,6 +69,7 @@ def load_runtime(args):
     import torch
     from hydra.utils import instantiate
     from vpp2.cli import load_config
+    from vpp2.models.wan21_14b.vpp2 import VPP2
 
     cfg = load_config(args.config, [
         f"paths.wan={args.wan}",
@@ -81,6 +82,9 @@ def load_runtime(args):
     ])
     dataset = instantiate(cfg.data.train)
     model = instantiate(cfg.model, model_dtype=torch.bfloat16, device=f"cuda:{args.gpu}")
+    if args.joint:
+        model.dit.load_state_dict(VPP2._load_video_checkpoint_state(args.joint), strict=True)
+        print(f"loaded Video weights from {args.joint}", flush=True)
     model.eval().requires_grad_(False)
     return model, dataset
 
@@ -103,6 +107,30 @@ def case_batch(dataset, case, device):
         context[~mask] = 0.0
         contexts.append(context)
     return batch, torch.stack(contexts).to(device)
+
+
+def truth_frames(batch):
+    import torch
+
+    truth = batch["video"][0].permute(1, 2, 3, 0).float()
+    return ((truth.clamp(-1, 1) + 1) * 127.5).to(torch.uint8).cpu().numpy()
+
+
+def sample_video(model, batch, context, num_frames, steps, seed):
+    import torch
+
+    condition = batch["condition_video"]
+    result = model.infer(
+        prompt=None,
+        input_image=condition[:, :, 0],
+        num_frames=num_frames,
+        context=context[None].to(model.torch_dtype),
+        context_mask=torch.ones((1, context.shape[0]), dtype=torch.bool, device=model.device),
+        num_inference_steps=steps,
+        seed=seed,
+        condition_video=condition,
+    )["video"]
+    return np.stack([np.asarray(frame) for frame in result])
 
 
 def shard(args):
@@ -166,24 +194,12 @@ def generate(args):
             if path.exists():
                 raise FileExistsError(path)
             batch, contexts = case_batch(dataset, case, device)
-            condition = batch["condition_video"]
-            truth = batch["video"][0].permute(1, 2, 3, 0).float()
-            truth = ((truth.clamp(-1, 1) + 1) * 127.5).to(torch.uint8).cpu().numpy()
+            truth = truth_frames(batch)
             videos = []
             for candidate, context in enumerate(contexts):
                 for offset in range(args.seeds):
                     # Every candidate shares the initial noise of its seed.
-                    result = model.infer(
-                        prompt=None,
-                        input_image=condition[:, :, 0],
-                        num_frames=truth.shape[0],
-                        context=context[None].to(model.torch_dtype),
-                        context_mask=torch.ones((1, context.shape[0]), dtype=torch.bool, device=device),
-                        num_inference_steps=args.steps,
-                        seed=args.seed + offset,
-                        condition_video=condition,
-                    )["video"]
-                    videos.append(np.stack([np.asarray(frame) for frame in result]))
+                    videos.append(sample_video(model, batch, context, truth.shape[0], args.steps, args.seed + offset))
                 print(f"{case['case']} candidate {candidate}", flush=True)
             shape = (len(contexts), args.seeds, *videos[0].shape)
             np.savez(path, truth=truth, videos=np.stack(videos).reshape(shape),
@@ -353,6 +369,7 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--tag", help="Names this checkpoint and split in the output")
     parser.add_argument("--checkpoint", type=Path)
+    parser.add_argument("--joint", type=Path, help="Replace the Video weights with those of this joint checkpoint")
     parser.add_argument("--config", type=Path, default=Path("configs/marvin/train_video.yaml"))
     parser.add_argument("--wan", type=Path)
     parser.add_argument("--prepared", type=Path)

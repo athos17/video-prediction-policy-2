@@ -63,6 +63,24 @@ def denormalize(dataset, action, proprio):
     return _ActionMetrics._denormalize_action(owner, action, proprio).numpy()
 
 
+def sample_chunk(model, item, context, mask, steps, seed):
+    import torch
+
+    chunk = model.infer_action(
+        prompt=None,
+        input_image=item["video"][:, 0].unsqueeze(0),
+        action_horizon=HORIZON,
+        condition_video=item["condition_video"],
+        proprio=item["proprio"][0],
+        context=context,
+        context_mask=torch.ones_like(mask),
+        num_video_frames=int(item["video_num_frames"]),
+        num_inference_steps=steps,
+        seed=seed,
+    )["action"]
+    return chunk.detach().to("cpu", torch.float32).reshape(HORIZON, -1)
+
+
 def sample(args):
     import torch
 
@@ -86,19 +104,7 @@ def sample(args):
                 context, mask = dataset._load_text_context(dataset.metadata.iloc[candidate["row"]])
                 context[~mask] = 0.0
                 for offset in range(args.seeds):
-                    chunk = model.infer_action(
-                        prompt=None,
-                        input_image=item["video"][:, 0].unsqueeze(0),
-                        action_horizon=HORIZON,
-                        condition_video=item["condition_video"],
-                        proprio=item["proprio"][0],
-                        context=context,
-                        context_mask=torch.ones_like(mask),
-                        num_video_frames=int(item["video_num_frames"]),
-                        num_inference_steps=args.steps,
-                        seed=args.seed + offset,
-                    )["action"]
-                    chunks.append(chunk.detach().to("cpu", torch.float32).reshape(HORIZON, -1))
+                    chunks.append(sample_chunk(model, item, context, mask, args.steps, args.seed + offset))
         proprio = item["proprio"]
         pad = item["action_is_pad"].cpu().numpy().astype(bool)
         np.savez(
