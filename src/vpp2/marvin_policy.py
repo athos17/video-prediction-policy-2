@@ -109,7 +109,7 @@ def prepare_frame(images):
 
 def normalize_state(processor, state):
     key = processor.shape_meta["state"][0]["key"]
-    batch = dict(state={key: torch.as_tensor(state, dtype=torch.float32)[None]})
+    batch = dict(state={key: torch.tensor(state, dtype=torch.float32)[None]})
     return processor.normalizer.forward(batch)["state"][key]
 
 
