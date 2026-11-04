@@ -1,0 +1,116 @@
+# VPP2 synchronous deployment; physical controller settings match this robot.
+dry_run: false
+instruction: "Pick up the purple coffee capsule with the right hand and put it in the bin."
+expected_arm_state: [3, 3]
+
+arm_control:
+  expected_input_mode: 1
+  qp_request_subscriber_node: /tj/qp_controller
+  allowed_qp_request_observer_nodes:
+    - /tj/all_topic_log_recorder
+
+topics:
+  quad_image: /quad_tile/compressed_undistorted
+  eef_left: /tj/info/eef_left
+  eef_right: /tj/info/eef_right
+  arm_joint_states: /tj/joint_states
+  hand_state_left: /hand_left/joint_states
+  hand_state_right: /hand_right/joint_states
+  input_mode: /tj/control/input_mode
+  arm_state: /tj/info/arm_state
+  qp_ik_request: /tj/control/model_ik_request
+  hand_command_left: /hand_left/joint_commands
+  hand_command_right: /hand_right/joint_commands
+  hand_bridge_health: /sharpa_sdk_bridge/health
+
+policy:
+  host: 6.6.7.150
+  port: 5555
+  timeout_ms: 3000
+  api_token_env: MARVIN_POLICY_API_TOKEN
+
+openwam_policy:
+  host: 192.168.50.1
+  port: 8851
+  connect_timeout_sec: 10.0
+  request_timeout_sec: 300.0
+  expected_representation: eef
+  expected_action_dim: 62
+  expected_rot6d_convention: column
+
+frames:
+  base: base_link
+
+camera:
+  raw_width: 1920
+  raw_height: 1488
+  output_width: 320
+  output_height: 240
+  wrist_bottom_crop_ratio: 0.065
+  resize_mode: stretch
+  state_sync_tolerance_sec: 0.05
+
+rates:
+  action_hz: 30.0
+  publisher_hz: 200.0
+  action_upsampling: zoh  # zoh or linear
+  eef_hz: 60.0
+
+command_filter:
+  enabled: true
+  eef_alpha: 1.0
+  hand_alpha: 0.3
+  # Translation-only RTC transition after filtering; false restores old targets.
+  rtc_boundary_blend:
+    enabled: false
+    steps: 6
+    max_offset_m: 0.005
+    min_speed_m_s: 0.04
+    min_direction_cos: 0.7
+    max_hand_change_rad: 0.15
+
+execution_horizon: 30
+
+freshness_sec:
+  camera: 0.30
+  eef_left: 0.20
+  eef_right: 0.20
+  arm_joints: 0.20
+  hand_left: 0.20
+  hand_right: 0.20
+  arm_state: 0.25
+
+safety:
+  freshness_fault_debounce_sec: 0.15
+  max_eef_translation_step_m: 0.1
+  max_eef_rotation_step_deg: 10.0
+  max_hand_speed_rad_s: 3.0
+
+operator_gates:
+  robot_mode_confirmed: true
+  coordinate_calibration_confirmed: true
+  qp_controller_config_confirmed: true
+
+T_M_B:
+  - [1.0, 0.0, 0.0, 0.0]
+  - [0.0, 1.0, 0.0, 0.0]
+  - [0.0, 0.0, 1.0, 0.0]
+  - [0.0, 0.0, 0.0, 1.0]
+
+hand_limits:
+  lower_rad: [-0.1745, -0.3491, -0.5236, -0.3491, 0.0, -0.17453293, -0.3491, 0.0, 0.0, -0.17453293, -0.3491, 0.0, 0.0, -0.17453293, -0.3491, 0.0, 0.0, 0.0, -0.17453293, -0.3491, 0.0, 0.0]
+  upper_rad: [1.9199, 0.3491, 1.3963, 0.3491, 1.7453, 1.5708, 0.3491, 1.7453, 1.3963, 1.5708, 0.3491, 1.7453, 1.3963, 1.5708, 0.3491, 1.7453, 1.3963, 0.2618, 1.5708, 0.3491, 1.7453, 1.3963]
+
+sharpa_sdk_bridge:
+  enabled: true
+  command_subscriber_node: /sharpa_sdk_bridge
+  allowed_command_observer_nodes:
+    - /tj/all_topic_log_recorder
+  serials:
+    left: C65E9B33C65F
+    right: CA579B36CA56
+  rate_hz: 100.0
+  feedback_rate_hz: 20.0
+  watchdog_sec: 0.20
+  max_speed_rad_s: 4.0
+  speed_coeff: 0.3
