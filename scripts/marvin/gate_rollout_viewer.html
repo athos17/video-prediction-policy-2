@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Marvin 多步滚动</title>
+<style>
+:root {
+  --bg: #fafaf8; --surface: #ffffff; --ink: #1d1d1b; --ink-2: #5c5c57; --ink-3: #8a8a84; --line: #e2e2dc; --grid: #eeeeea;
+  --a: #2a78c8; --b: #d9622b; --good: #2e7d4f; --bad: #b3372f; --accent-soft: #eef3f9;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #161615; --surface: #20201e; --ink: #ecece6; --ink-2: #acaca5; --ink-3: #7c7c76; --line: #34342f; --grid: #2a2a26;
+  --a: #5ba3e6; --b: #ee8a57; --good: #62b986; --bad: #e0776e; --accent-soft: #24303c;
+} }
+:root[data-theme="dark"] {
+  --bg: #161615; --surface: #20201e; --ink: #ecece6; --ink-2: #acaca5; --ink-3: #7c7c76; --line: #34342f; --grid: #2a2a26;
+  --a: #5ba3e6; --b: #ee8a57; --good: #62b986; --bad: #e0776e; --accent-soft: #24303c;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.55 -apple-system, "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; }
+main { max-width: 1320px; margin: 0 auto; padding: 24px 16px 64px; }
+h1 { font-size: 22px; margin: 0 0 6px; }
+.lede { color: var(--ink-2); margin: 0 0 16px; max-width: 78ch; }
+.controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 10px 0; position: sticky; top: 0; background: var(--bg); z-index: 5; border-bottom: 1px solid var(--line); }
+.controls label { color: var(--ink-2); display: flex; gap: 6px; align-items: center; }
+select { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
+#count { color: var(--ink-3); margin-left: auto; font-variant-numeric: tabular-nums; }
+table { border-collapse: collapse; margin: 16px 0 24px; font-variant-numeric: tabular-nums; background: var(--surface); }
+th, td { padding: 6px 12px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+th { color: var(--ink-2); font-weight: 500; }
+.table-scroll { overflow-x: auto; }
+.note { color: var(--ink-2); font-size: 13px; margin: -14px 0 24px; max-width: 90ch; }
+section.case { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px; margin: 16px 0; }
+.case h2 { font-size: 15px; margin: 0 0 2px; }
+.prompts { color: var(--ink-2); margin-bottom: 10px; }
+.prompts b { font-weight: 600; }
+.pa { color: var(--a); } .pb { color: var(--b); }
+.flags { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 0 0 10px; font-variant-numeric: tabular-nums; }
+.flag { color: var(--ink-2); }
+.flag .yes { color: var(--good); font-weight: 600; } .flag .no { color: var(--bad); font-weight: 600; }
+.body { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 6fr); gap: 14px; }
+video { width: 100%; display: block; background: #000; border-radius: 4px; aspect-ratio: 832 / 774; }
+.charts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-content: start; }
+.chart { min-width: 0; }
+.chart h3 { font-size: 12px; font-weight: 500; color: var(--ink-2); margin: 0 0 2px; }
+.chart svg { width: 100%; height: auto; display: block; overflow: visible; }
+.legend { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px 14px; color: var(--ink-2); font-size: 12px; }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.axis { font-size: 10px; fill: var(--ink-3); }
+.goal-label { font-size: 10px; font-weight: 600; }
+.tip { position: fixed; pointer-events: none; background: var(--ink); color: var(--bg); padding: 4px 7px; border-radius: 4px; font-size: 12px; font-variant-numeric: tabular-nums; z-index: 10; white-space: pre; display: none; }
+@media (max-width: 860px) { .body { grid-template-columns: 1fr; } .charts { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>多步滚动：从 A 的第一帧走完一次抓取</h1>
+  <p class="lede">模型每次生成 32 步动作（1.07 秒），并由视频模型想象这段时间的画面；下一轮观测这些画面，并把上一段最后的动作指令当作本体状态。这里没有机器人和物理仿真，想象的画面也不受动作影响，因此「抓取」只代表轨迹和手型达到了真实抓取时的姿态，不代表物体真的被抓起。</p>
+  <div class="controls">
+    <label>想象画面的模型 <select id="world"></select></label>
+    <label>手 <select id="hand"><option value="all">全部</option><option value="same">A、B 同一只手</option><option value="other">A、B 不同手</option></select></label>
+    <label>Episode <select id="episode"><option value="all">全部</option></select></label>
+    <label>结果 <select id="outcome"><option value="all">全部</option><option value="both">A、B 都达到 5 cm 抓取</option><option value="b">B 达到</option><option value="notb">B 未达到</option></select></label>
+    <span id="count"></span>
+  </div>
+  <div class="table-scroll"><table id="summary"></table></div>
+  <p class="note">5 cm 抓取：指令手距真实抓取位置不超过 5 cm，手已闭合到抓取手型的 80%，之后抬高至少 5 cm。对照行把另一条指令的轨迹拿去和这个目标比，如果也算达成，说明它并不区分物体。真实轨迹行用于校准这个判据。</p>
+  <div id="cases"></div>
+</main>
+<div class="tip" id="tip"></div>
+<script>
+const HANDS = { left: "左手", right: "右手" };
+const WORLD_NAMES = { v5000: "Video 5000 步（画质正常）", j17500: "联合 17500 步（画面发灰）" };
+const METERS = 1000;
+const state = { data: null };
+const $ = id => document.getElementById(id);
+const NS = "http://www.w3.org/2000/svg";
+function el(name, attrs = {}, parent) {
+  const node = document.createElementNS(NS, name);
+  for (const key in attrs) node.setAttribute(key, attrs[key]);
+  if (parent) parent.appendChild(node);
+  return node;
+}
+const percent = value => value == null ? "–" : `${Math.round(value * 100)}%`;
+const centimeters = value => value == null ? "–" : `${(value * 100).toFixed(1)} cm`;
+
+function pathOf(points) {
+  let path = "", open = false;
+  for (const point of points) {
+    if (!point) { open = false; continue; }
+    path += `${open ? "L" : "M"}${point[0].toFixed(1)} ${point[1].toFixed(1)}`;
+    open = true;
+  }
+  return path;
+}
+
+function seriesOf(item, world) {
+  const run = item.worlds[world];
+  const [a, b] = item.prompts;
+  return [
+    { key: "imagined A", color: "var(--a)", width: 2, dash: "", prompt: 0, arms: run.rollouts[0], distance: run.rollouts[0].distance, closure: run.rollouts[0].closure },
+    { key: "imagined B", color: "var(--b)", width: 2, dash: "", prompt: 1, arms: run.rollouts[1], distance: run.rollouts[1].distance, closure: run.rollouts[1].closure },
+    { key: "real A", color: "var(--a)", width: 1.25, dash: "4 3", prompt: 0, arms: a.real, distance: a.distance, closure: a.closure },
+    { key: "real B", color: "var(--b)", width: 1.25, dash: "4 3", prompt: 1, arms: b.real, distance: b.distance, closure: b.closure },
+    { key: "real frames A", color: "var(--ink-3)", width: 1.25, dash: "1 2", prompt: 0, arms: item.teacher },
+  ];
+}
+
+// Top view: x rises upward and y rises to the left, on an equal scale, as seen from above the robot.
+function topView(host, item, world, arm) {
+  const size = 260, pad = 14;
+  const lines = seriesOf(item, world).filter(line => line.arms[arm]);
+  const goals = item.prompts.map((prompt, index) => ({ ...prompt, index })).filter(prompt => prompt.hand === arm);
+  const all = lines.flatMap(line => line.arms[arm].filter(Boolean)).concat(goals.map(goal => goal.goal));
+  const xs = all.map(point => point[0]), ys = all.map(point => point[1]);
+  const span = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys), 50) * 1.08;
+  const cx = (Math.max(...xs) + Math.min(...xs)) / 2, cy = (Math.max(...ys) + Math.min(...ys)) / 2;
+  const scale = (size - pad * 2) / span;
+  const place = point => point && [size / 2 - (point[1] - cy) * scale, size / 2 - (point[0] - cx) * scale];
+  const svg = el("svg", { viewBox: `0 0 ${size} ${size}` }, host);
+  el("rect", { x: 0.5, y: 0.5, width: size - 1, height: size - 1, fill: "none", stroke: "var(--line)" }, svg);
+  const bar = 100 * scale;
+  el("line", { x1: size - pad - bar, x2: size - pad, y1: size - 10, y2: size - 10, stroke: "var(--ink-3)", "stroke-width": 1.5 }, svg);
+  el("text", { x: size - pad - bar / 2, y: size - 14, "text-anchor": "middle", class: "axis" }, svg).textContent = "10 cm";
+  for (const line of lines) {
+    el("path", { d: pathOf(line.arms[arm].map(place)), fill: "none", stroke: line.color, "stroke-width": line.width, "stroke-dasharray": line.dash, "stroke-linejoin": "round", "stroke-linecap": "round" }, svg);
+  }
+  const [startX, startY] = place(lines[0].arms[arm][0]);
+  el("circle", { cx: startX, cy: startY, r: 4, fill: "var(--ink)", stroke: "var(--surface)", "stroke-width": 2 }, svg);
+  for (const goal of goals) {
+    const [x, y] = place(goal.goal), color = goal.index ? "var(--b)" : "var(--a)";
+    el("rect", { x: x - 6, y: y - 6, width: 12, height: 12, fill: "var(--surface)", stroke: color, "stroke-width": 2, rx: 2 }, svg);
+    const label = el("text", { x: x + 9, y: y + 4, class: "goal-label", fill: color }, svg);
+    label.textContent = "AB"[goal.index];
+  }
+  const cursors = lines.slice(0, 2).map(line => ({ line, dot: el("circle", { r: 4.5, fill: line.color, stroke: "var(--surface)", "stroke-width": 2, visibility: "hidden" }, svg) }));
+  return time => {
+    for (const { line, dot } of cursors) {
+      const point = place(line.arms[arm][Math.min(time, line.arms[arm].length - 1)]);
+      if (point) { dot.setAttribute("cx", point[0]); dot.setAttribute("cy", point[1]); dot.setAttribute("visibility", "visible"); }
+    }
+  };
+}
+
+function timeChart(host, config) {
+  const width = 300, height = 150, left = 34, right = 8, top = 8, bottom = 20;
+  const { lines, step, format, ticks, threshold, seek, grasps } = config;
+  const count = Math.max(...lines.map(line => line.values.length));
+  const values = lines.flatMap(line => line.values.filter(value => value != null));
+  const low = config.low ?? Math.min(...values), high = Math.max(...values, threshold ?? -Infinity);
+  const range = high - low || 1;
+  const x = index => left + index / Math.max(count - 1, 1) * (width - left - right);
+  const y = value => top + (1 - (value - low) / range) * (height - top - bottom);
+  const svg = el("svg", { viewBox: `0 0 ${width} ${height}` }, host);
+  for (const tick of ticks(low, high)) {
+    el("line", { x1: left, x2: width - right, y1: y(tick), y2: y(tick), stroke: "var(--grid)" }, svg);
+    el("text", { x: left - 4, y: y(tick) + 3, "text-anchor": "end", class: "axis" }, svg).textContent = format(tick);
+  }
+  const duration = (count - 1) * step;
+  for (let second = 0; second <= duration; second += duration > 9 ? 4 : 2) {
+    const position = x(second / step);
+    el("text", { x: position, y: height - 6, "text-anchor": "middle", class: "axis" }, svg).textContent = `${second}s`;
+  }
+  if (threshold != null) {
+    el("line", { x1: left, x2: width - right, y1: y(threshold), y2: y(threshold), stroke: "var(--ink-3)", "stroke-dasharray": "2 3" }, svg);
+  }
+  for (const grasp of grasps) {
+    el("line", { x1: x(grasp.time / step), x2: x(grasp.time / step), y1: top, y2: height - bottom, stroke: grasp.color, "stroke-opacity": 0.45 }, svg);
+  }
+  for (const line of lines) {
+    const points = line.values.map((value, index) => value == null ? null : [x(index), y(value)]);
+    el("path", { d: pathOf(points), fill: "none", stroke: line.color, "stroke-width": line.width, "stroke-dasharray": line.dash, "stroke-linejoin": "round", "stroke-linecap": "round" }, svg);
+  }
+  const cursor = el("line", { y1: top, y2: height - bottom, stroke: "var(--ink)", "stroke-width": 1, visibility: "hidden" }, svg);
+  const hit = el("rect", { x: left, y: top, width: width - left - right, height: height - top - bottom, fill: "transparent", style: "cursor:crosshair" }, svg);
+  const tip = $("tip");
+  const indexAt = event => {
+    const box = svg.getBoundingClientRect();
+    const position = (event.clientX - box.left) / box.width * width;
+    return Math.max(0, Math.min(count - 1, Math.round((position - left) / (width - left - right) * (count - 1))));
+  };
+  hit.addEventListener("mousemove", event => {
+    const index = indexAt(event);
+    tip.textContent = `${(index * step).toFixed(1)} s\n` + lines.filter(line => line.values[index] != null).map(line => `${line.key}: ${format(line.values[index])}`).join("\n");
+    tip.style.display = "block";
+    tip.style.left = `${Math.min(event.clientX + 12, innerWidth - 170)}px`;
+    tip.style.top = `${event.clientY + 12}px`;
+  });
+  hit.addEventListener("mouseleave", () => { tip.style.display = "none"; });
+  hit.addEventListener("click", event => seek(indexAt(event) * step));
+  return index => {
+    cursor.setAttribute("x1", x(index)); cursor.setAttribute("x2", x(index));
+    cursor.setAttribute("visibility", "visible");
+  };
+}
+
+function chartBox(parent, title) {
+  const box = document.createElement("div");
+  box.className = "chart";
+  const heading = document.createElement("h3");
+  heading.textContent = title;
+  box.appendChild(heading);
+  parent.appendChild(box);
+  return box;
+}
+
+function buildCharts(host, item, world, video) {
+  const step = state.data.frameStep;
+  const lines = seriesOf(item, world);
+  const seek = time => { if (video.duration) video.currentTime = time; };
+  const updates = [];
+  const legend = document.createElement("div");
+  legend.className = "legend";
+  for (const line of lines) {
+    const entry = document.createElement("span");
+    const swatch = el("svg", { width: 22, height: 8 }, entry);
+    el("line", { x1: 1, x2: 21, y1: 4, y2: 4, stroke: line.color, "stroke-width": Math.max(line.width, 1.5), "stroke-dasharray": line.dash }, swatch);
+    entry.appendChild(document.createTextNode({ "imagined A": "想象 指令 A", "imagined B": "想象 指令 B", "real A": "真实 A", "real B": "真实 B", "real frames A": "真实画面逐段预测 A" }[line.key]));
+    legend.appendChild(entry);
+  }
+  host.appendChild(legend);
+  const arms = [...new Set(item.prompts.map(prompt => prompt.hand))];
+  for (const arm of arms) {
+    updates.push(topView(chartBox(host, `${HANDS[arm]}俯视（方块为真实抓取位置，黑点为起点）`), item, world, arm));
+  }
+  if (arms.length === 1) host.lastChild.style.gridColumn = "1 / 2";
+  const grasps = item.prompts.map((prompt, index) => ({ time: prompt.grasp / 30, color: index ? "var(--b)" : "var(--a)" }));
+  const timed = lines.filter(line => line.distance);
+  updates.push(timeChart(chartBox(host, "指令手到各自真实抓取位置的距离（虚线 5 cm，竖线为真实抓取时刻）"), {
+    lines: timed.map(line => ({ ...line, values: line.distance.map(value => value / 10) })),
+    step, grasps, seek, threshold: 5, low: 0, format: value => `${value.toFixed(0)}`,
+    ticks: (low, high) => { const gap = high > 30 ? 10 : 5; const list = []; for (let tick = 0; tick <= high; tick += gap) list.push(tick); return list; },
+  }));
+  updates.push(timeChart(chartBox(host, "手闭合程度（1 为真实抓取手型，虚线 0.8）"), {
+    lines: timed.map(line => ({ ...line, values: line.closure })),
+    step, grasps, seek, threshold: 0.8, format: value => value.toFixed(1),
+    low: Math.min(0, ...timed.flatMap(line => line.closure)),
+    ticks: (low, high) => { const list = []; for (let tick = Math.ceil(low * 2) / 2; tick <= high; tick += 0.5) list.push(tick); return list; },
+  }));
+  updates.push(timeChart(chartBox(host, "指令手高度 z（cm）"), {
+    lines: lines.filter(line => line.key !== "real frames A").map(line => ({ ...line, values: line.arms[item.prompts[line.prompt].hand].map(point => point && point[2] / 10) })),
+    step, grasps, seek, format: value => value.toFixed(0),
+    ticks: (low, high) => { const gap = high - low > 40 ? 20 : 10; const list = []; for (let tick = Math.ceil(low / gap) * gap; tick <= high; tick += gap) list.push(tick); return list; },
+  }));
+  const update = () => {
+    const index = Math.round(video.currentTime / step);
+    updates.forEach(apply => apply(index));
+    if (!video.paused) requestAnimationFrame(update);
+  };
+  video.addEventListener("play", update);
+  video.addEventListener("seeked", update);
+  video.addEventListener("loadeddata", update);
+}
+
+function flag(label, value) {
+  const hit = value >= 0.5;
+  return `<span class="flag">${label} <span class="${hit ? "yes" : "no"}">${hit ? "是" : "否"}</span></span>`;
+}
+
+function renderCase(item, world) {
+  const section = document.createElement("section");
+  section.className = "case";
+  const metrics = item.worlds[world].metrics;
+  const [a, b] = item.prompts;
+  section.innerHTML = `<h2>${item.id}（${item.sameHand ? "同一只手" : "不同手"}）</h2>
+    <div class="prompts"><span class="pa"><b>A</b> ${HANDS[a.hand]} ${a.object}</span>，真实 ${(a.grasp / 30).toFixed(1)} 秒抓取 · <span class="pb"><b>B</b> ${HANDS[b.hand]} ${b.object}</span>，真实 ${(b.grasp / 30).toFixed(1)} 秒抓取</div>
+    <div class="flags">
+      ${flag("A 5 cm 抓取", metrics.a_grasp_5cm)}
+      ${flag("B 5 cm 抓取", metrics.b_grasp_5cm)}
+      ${flag("指令 B 更接近 B", metrics.b_prompt_nearer_b)}
+      <span class="flag">最近距离 A ${centimeters(metrics.a_reach)} · B ${centimeters(metrics.b_reach)}</span>
+      <span class="flag">指令 A 跟踪真实 A ${centimeters(metrics.a_tracking)}（不动 ${centimeters(metrics.a_hold_tracking)}）</span>
+    </div>
+    <div class="body"><div><video controls muted playsinline loop></video></div><div class="charts"></div></div>`;
+  const video = section.querySelector("video");
+  buildCharts(section.querySelector(".charts"), item, world, video);
+  // Loading through a blob keeps seeking working on a static server without range requests.
+  const observer = new IntersectionObserver(entries => {
+    if (!entries.some(entry => entry.isIntersecting)) return;
+    observer.disconnect();
+    fetch(`videos/${world}_${item.id}.mp4`).then(response => response.blob()).then(blob => { video.src = URL.createObjectURL(blob); });
+  }, { rootMargin: "600px" });
+  observer.observe(section);
+  return section;
+}
+
+function summaryRows(world, group) {
+  const run = state.data.summary[`rollout_${world}`][group] || {};
+  const teacher = state.data.summary.rollout_real[group] || {};
+  const real = state.data.summary.real[group] || {};
+  const cell = (source, key, render = percent) => {
+    const item = source[key];
+    return item ? (render === percent ? `${percent(item.mean)} <span style="color:var(--ink-3)">[${percent(item.ci95[0])}, ${percent(item.ci95[1])}]</span>` : render(item.median)) : "–";
+  };
+  return `<tr><th>${run.cases || 0} 对</th><th>指令 A → A 的抓取</th><th>指令 B → B 的抓取</th></tr>
+    <tr><td>5 cm 抓取</td><td>${cell(run, "a_grasp_5cm")}</td><td>${cell(run, "b_grasp_5cm")}</td></tr>
+    <tr><td>3 cm 抓取</td><td>${cell(run, "a_grasp_3cm")}</td><td>${cell(run, "b_grasp_3cm")}</td></tr>
+    <tr><td>8 cm 抓取</td><td>${cell(run, "a_grasp_8cm")}</td><td>${cell(run, "b_grasp_8cm")}</td></tr>
+    <tr><td>到达 5 cm 内（不看手型）</td><td>${cell(run, "a_reach_5cm")}</td><td>${cell(run, "b_reach_5cm")}</td></tr>
+    <tr><td>最近距离（中位数）</td><td>${cell(run, "a_reach", centimeters)}</td><td>${cell(run, "b_reach", centimeters)}</td></tr>
+    <tr><td>对照：另一条指令也算达成（5 cm）</td><td>${cell(run, "b_prompt_grasps_a_5cm")}</td><td>${cell(run, "a_prompt_grasps_b_5cm")}</td></tr>
+    <tr><td>比另一条指令更接近目标（随机 50%）</td><td>${cell(run, "a_prompt_nearer_a")}</td><td>${cell(run, "b_prompt_nearer_b")}</td></tr>
+    <tr><td>真实画面逐段预测 A，5 cm 抓取</td><td>${cell(teacher, "a_grasp_5cm")}</td><td>–</td></tr>
+    <tr><td>校准：真实轨迹，5 cm 抓取</td><td>${cell(real, "a_grasp_5cm")}</td><td>${cell(real, "b_grasp_5cm")}</td></tr>`;
+}
+
+function render() {
+  const { data } = state;
+  const world = $("world").value, hand = $("hand").value, episode = $("episode").value, outcome = $("outcome").value;
+  const group = hand === "same" ? "same_hand" : hand === "other" ? "other_hand" : "all";
+  $("summary").innerHTML = summaryRows(world, group);
+  const kept = data.cases.filter(item => {
+    const run = item.worlds[world];
+    if (!run) return false;
+    if (hand === "same" && !item.sameHand) return false;
+    if (hand === "other" && item.sameHand) return false;
+    if (episode !== "all" && String(item.episode) !== episode) return false;
+    if (outcome === "both" && !(run.metrics.a_grasp_5cm >= 0.5 && run.metrics.b_grasp_5cm >= 0.5)) return false;
+    if (outcome === "b" && !(run.metrics.b_grasp_5cm >= 0.5)) return false;
+    if (outcome === "notb" && run.metrics.b_grasp_5cm >= 0.5) return false;
+    return true;
+  });
+  $("count").textContent = `显示 ${kept.length} / ${data.cases.length} 对`;
+  const host = $("cases");
+  host.replaceChildren(...kept.map(item => renderCase(item, world)));
+}
+
+fetch("data.json").then(response => response.json()).then(data => {
+  state.data = data;
+  for (const world of data.worlds) $("world").add(new Option(WORLD_NAMES[world] || world, world));
+  for (const episode of [...new Set(data.cases.map(item => item.episode))]) $("episode").add(new Option(episode, episode));
+  for (const id of ["world", "hand", "episode", "outcome"]) $(id).addEventListener("change", render);
+  render();
+});
+</script>
+</body>
+</html>
