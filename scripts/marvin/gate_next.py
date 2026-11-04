@@ -33,6 +33,8 @@ CHANCE = 0.5
 # The current frame and the future, as in the Gate 1 site.
 FIRST_FRAME = CONDITION_FRAMES - 1
 LABEL_HEIGHT = 18
+PANEL = 440
+COLORS = ("#2a78c8", "#d9622b")
 
 
 def build_pairs(csv):
@@ -250,39 +252,49 @@ def write_video(path, destination):
     encode(np.concatenate([top, bottom], axis=1), destination)
 
 
+def draw_panel(actions, real, goals, valid, pair, hand):
+    """Top view of one arm: x rises upward and y rises to the left, in a square of equal scale."""
+    arm = XYZ[hand]
+    points = [actions[:, :, valid][..., arm].reshape(-1, 3), real[:, valid][..., arm].reshape(-1, 3)]
+    markers = [(goals[index, arm], COLORS[index], "AB"[index]) for index in (A, B)
+               if pair["candidates"][index]["hand"] == hand]
+    points = np.concatenate(points + [goal[None] for goal, _, _ in markers])[:, :2]
+    center, scale = (points.max(0) + points.min(0)) / 2, max(np.ptp(points, axis=0).max(), 0.05) * 1.15
+
+    def place(xy):
+        relative = (np.asarray(xy)[..., :2] - center) / scale
+        return np.stack([(0.5 - relative[..., 1]) * PANEL, (0.5 - relative[..., 0]) * PANEL + LABEL_HEIGHT], -1)
+
+    panel = Image.new("RGB", (PANEL, PANEL + LABEL_HEIGHT), "white")
+    draw = ImageDraw.Draw(panel)
+    draw.text((4, 3), f"{hand} arm, top view, {scale:.2f} m across", fill="black")
+    for index in (A, B):
+        for seed in range(actions.shape[1]):
+            draw.line([tuple(point) for point in place(actions[index, seed][valid][:, arm])], fill=COLORS[index], width=2)
+        line = place(real[index][valid][:, arm])
+        for start, end in zip(line[::2], line[1::2]):
+            draw.line([tuple(start), tuple(end)], fill=COLORS[index], width=1)
+    x, y = place(actions[A, 0][valid][0, arm])
+    draw.ellipse((x - 4, y - 4, x + 4, y + 4), fill="black")
+    for goal, color, name in markers:
+        x, y = place(goal)
+        draw.rectangle((x - 5, y - 5, x + 5, y + 5), outline=color, width=2)
+        draw.text((x + 7, y - 5), f"{name} grasp", fill=color)
+    return panel
+
+
 def write_plot(path, destination):
-    import matplotlib
-
-    matplotlib.use("Agg")
-    from matplotlib import pyplot
-
     with np.load(path) as data:
         actions, real, goals, pad = data["actions"], data["real"], data["goals"], data["pad"]
         pair = json.loads(str(data["case"]))
-    valid = ~pad
-    a, b = pair["candidates"]
-    figure, axes = pyplot.subplots(1, 2, figsize=(10, 4.4), constrained_layout=True)
-    for axis, hand in zip(axes, ("left", "right")):
-        arm = XYZ[hand]
-        axis.plot(*real[A][valid][:, arm][:, :2].T, color="#2a78c8", ls="--", lw=2, label="real A")
-        axis.plot(*real[B][valid][:, arm][:, :2].T, color="#d9622b", ls="--", lw=2, label="real B")
-        for seed in range(actions.shape[1]):
-            axis.plot(*actions[A, seed][valid][:, arm][:, :2].T, color="#2a78c8", lw=1.5,
-                      label="prompt A" if seed == 0 else None)
-            axis.plot(*actions[B, seed][valid][:, arm][:, :2].T, color="#d9622b", lw=1.5,
-                      label="prompt B" if seed == 0 else None)
-        axis.scatter(*actions[A, 0][valid][0, arm][:2], color="black", s=30, zorder=5, label="observed start")
-        if a["hand"] == hand:
-            axis.scatter(*goals[A, arm][:2], color="#2a78c8", marker="*", s=140, label="A grasp")
-        if b["hand"] == hand:
-            axis.scatter(*goals[B, arm][:2], color="#d9622b", marker="*", s=140, label="B grasp")
-        axis.set_title(f"{hand} arm, EEF x-y (m)")
-        axis.set_aspect("equal", adjustable="datalim")
-        axis.grid(alpha=0.3)
-        axis.legend(fontsize=8)
-    figure.suptitle(f"{pair['case']}   A: {describe(a)}   B: {describe(b)}", fontsize=10)
-    figure.savefig(destination, dpi=110)
-    pyplot.close(figure)
+    a, b = (describe(candidate) for candidate in pair["candidates"])
+    sheet = Image.new("RGB", (PANEL * 2 + 4, PANEL + LABEL_HEIGHT * 3), "white")
+    draw = ImageDraw.Draw(sheet)
+    draw.text((4, 3), f"{pair['case']}  blue A: {a}  orange B: {b}", fill="black")
+    draw.text((4, LABEL_HEIGHT + 3), "solid: generated under that prompt, dashed: real, dot: observed start", fill="black")
+    for column, hand in enumerate(("left", "right")):
+        sheet.paste(draw_panel(actions, real, goals, ~pad, pair, hand), (column * (PANEL + 4), LABEL_HEIGHT * 2))
+    sheet.save(destination)
 
 
 def report(args):
