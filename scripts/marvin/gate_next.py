@@ -11,7 +11,8 @@ ends well before any grasp, so the actions are also compared with where B was re
   report  Summarize both and write one video and one trajectory plot per case.
 
 The real B starts from another scene and arm pose, so generations are compared in pairs against
-the same reference, and trajectories are compared as displacements from their own start.
+the same reference, trajectories as displacements from their own start, and both also with the
+real grasp of B: its end-effector position for actions and its frame for videos.
 """
 
 import argparse
@@ -111,6 +112,7 @@ def sample_videos(args):
     directory = args.output / f"video_{args.tag}"
     directory.mkdir(parents=True, exist_ok=True)
     model, dataset = load_video_runtime(args)
+    prefix = np.concatenate([[0], np.cumsum(dataset.trajectory_lengths)[:-1]])
     with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
         for pair in shard(args):
             path = directory / f"{pair['case']}.npz"
@@ -119,12 +121,16 @@ def sample_videos(args):
             batch, contexts = case_batch(dataset, pair, model.device)
             next_start = dict(pair, row=pair["candidates"][B]["row"], candidates=pair["candidates"][B:])
             real = [truth_frames(batch), truth_frames(case_batch(dataset, next_start, model.device)[0])]
+            goals = [
+                truth_frames(dict(video=window(dataset, prefix, candidate["row"], candidate["grasp"])["video"][None]))[FIRST_FRAME]
+                for candidate in pair["candidates"]
+            ]
             videos = [
                 sample_video(model, batch, context, real[A].shape[0], args.steps, args.seed + offset)
                 for context in contexts for offset in range(args.seeds)
             ]
             np.savez(path, videos=np.stack(videos).reshape(2, args.seeds, *videos[0].shape), real=np.stack(real),
-                     case=json.dumps(pair))
+                     goals=np.stack(goals), case=json.dumps(pair))
             print(pair["case"], flush=True)
 
 
@@ -191,6 +197,7 @@ def action_row(path):
 def video_row(path):
     with np.load(path) as data:
         videos, real = data["videos"].astype(np.float32), data["real"].astype(np.float32)
+        goals = data["goals"].astype(np.float32)
         pair = json.loads(str(data["case"]))
     row = dict(case=pair["case"], episode=pair["episode"], seg_id=pair["seg_id"], same_hand=pair["same_hand"])
     for name, width in (("frame", videos.shape[-2]), ("table", WRIST_X)):
@@ -205,6 +212,12 @@ def video_row(path):
         row[f"{name}_l1_a_to_real_b"] = float(distance[:, A, B].mean())
         row[f"{name}_l1_a_to_real_a"] = float(distance[:, A, A].mean())
         row[f"{name}_l1_b_to_real_a"] = float(distance[:, B, A].mean())
+        # The last generated frame against the real frame of the grasp.
+        to_goal = np.array([[[np.abs(videos[p, seed, -1, :, :width] - goals[q, :, :width]).mean()
+                              for q in (A, B)] for p in (A, B)] for seed in range(videos.shape[1])])
+        row[f"{name}_b_prompt_nearer_b_grasp"] = float((to_goal[:, B, B] < to_goal[:, A, B]).mean())
+        row[f"{name}_a_prompt_nearer_a_grasp"] = float((to_goal[:, A, A] < to_goal[:, B, A]).mean())
+        row[f"{name}_b_prompt_nearer_b_grasp_chance"] = row[f"{name}_a_prompt_nearer_a_grasp_chance"] = CHANCE
     future = videos[:, :, CONDITION_FRAMES:]
     row["prompt_gap"] = float(np.abs(future[A] - future[B]).mean())
     row["seed_gap"] = float(np.mean([np.abs(future[p, 0] - future[p, 1]).mean() for p in (A, B)]))
@@ -242,14 +255,16 @@ def describe(candidate):
 
 def write_video(path, destination):
     with np.load(path) as data:
-        videos, real = data["videos"], data["real"]
+        videos, real, goals = data["videos"], data["real"], data["goals"]
         pair = json.loads(str(data["case"]))
     a, b = (describe(candidate) for candidate in pair["candidates"])
     top = np.concatenate([labeled(videos[A, 0, FIRST_FRAME:], f"generated, prompt A: {a}"),
                           labeled(videos[B, 0, FIRST_FRAME:], f"generated, prompt B: {b}")], axis=2)
     bottom = np.concatenate([labeled(real[A, FIRST_FRAME:], f"real A: {a}"),
                              labeled(real[B, FIRST_FRAME:], f"real B: {b}")], axis=2)
-    encode(np.concatenate([top, bottom], axis=1), destination)
+    grasps = np.concatenate([labeled(np.repeat(goals[index][None], real.shape[1] - FIRST_FRAME, axis=0), f"real {name} at grasp")
+                             for index, name in enumerate("AB")], axis=2)
+    encode(np.concatenate([top, bottom, grasps], axis=1), destination)
 
 
 def draw_panel(actions, real, goals, valid, pair, hand):
