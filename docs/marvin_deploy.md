@@ -42,14 +42,15 @@ export PYTHON_BIN=/gaozt-test1/lyh/envs/vpp2/bin/python
 CUDA_VISIBLE_DEVICES=0 scripts/marvin/serve.sh \
   --checkpoint /gaozt-test1/lyh/runs/vpp2_marvin/joint/checkpoints/weights/<权重> \
   --wan /gaozt-test1/lyh/models/VPP2/checkpoints/Wan2.1-I2V-14B-480P \
-  --prepared /gaozt-test1/lyh/datasets/vpp2_marvin_pick_place_2_3/prepared
+  --prepared /gaozt-test1/lyh/datasets/vpp2_marvin_pick_place_2_3/prepared \
+  --compile
 ```
 
 ```bash
 ssh -N -L 8851:127.0.0.1:8851 a800
 ```
 
-出现 `VPP2 Marvin server listening` 后，服务才可以使用。
+出现 `VPP2 Marvin server listening` 后，服务才可以使用。`--compile` 会在监听前完成 `torch.compile`，启动时间因此多出约半分钟到两分半钟。
 
 ## 三、不接机器人的模拟
 
@@ -82,8 +83,8 @@ python run_vpp2_sim_client.py --media-root <media> --csv <prepared>/val.csv \
 ## 尚未解决
 
 - **RTX 5090：** 权重 32.3 GiB 超过显存 31.8 GiB，服务目前跑不起来，需要先实现分层调度。
-- **延迟：** A800 上服务端每次推理约 1.13 秒，长于一段动作的时长（1 秒）。推理期间机器人保持上一个目标，属于走走停停。
-- **网络：** 机器人访问 A800 需要能走通隧道或路由，延迟要在现场实测。从开发机经隧道访问时，请求总耗时约 1.39 秒。
+- **延迟：** A800 上加 `--compile` 后，服务端每次推理约 0.65 秒。推理期间机器人保持上一个目标，每段动作之间仍有停顿。
+- **网络：** 机器人访问 A800 需要能走通隧道或路由，延迟要在现场实测。从开发机经隧道访问时，请求总耗时约 0.87 秒。
 - **机器人 dry-run：** 真实相机、ROS 和机器人网络还没有测试过。
 
 ## 已验证（A800，2026-11-04，step 17500）
@@ -98,3 +99,14 @@ python run_vpp2_sim_client.py --media-root <media> --csv <prepared>/val.csv \
 | 现编码和缓存的文本特征，16 个窗口 | 动作 L1 差 0.0029，换噪声为 0.0182 |
 
 现编码的文本特征与缓存有微小差异，上表显示它对动作的影响小于采样噪声。
+
+## `--compile` 的效果（A800，32 个窗口，step 17500）
+
+用 `scripts/marvin/check_compile.py` 核对。
+
+| 项目 | 不编译 | 编译 |
+| --- | --- | --- |
+| 每次推理 | 1.14 秒 | 0.65 秒 |
+| 到示范动作的距离 | 0.15973 | 0.15973 |
+
+编译后的动作不是逐位相同：同一噪声下归一化 L1 差 0.0033，换噪声的差异为 0.0202。显存不变，所以它解决不了 RTX 5090 放不下模型的问题。
