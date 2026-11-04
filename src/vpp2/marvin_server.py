@@ -23,6 +23,7 @@ def parser():
     p.add_argument("--steps", type=int, default=10, help="Action denoising steps, as in evaluation")
     p.add_argument("--seed", type=int, help="Fixed noise; the default samples new noise every request")
     p.add_argument("--text-encoder", action="store_true", help="Also encode prompts absent from the cache")
+    p.add_argument("--compile", action="store_true", help="torch.compile before listening, about 1.7x faster")
     p.add_argument("--mock", action="store_true")
     return p
 
@@ -60,7 +61,7 @@ def build_policy(args):
         raise SystemExit("A real model needs --checkpoint --wan --prepared, or use --mock")
     import torch
 
-    from .marvin_policy import MarvinPolicy, PromptTable, load_runtime
+    from .marvin_policy import MarvinPolicy, PromptTable, compile_model, load_runtime
 
     model, processor, step = load_runtime(
         args.checkpoint, config=args.config, wan=args.wan, prepared=args.prepared,
@@ -73,6 +74,10 @@ def build_policy(args):
 
     prompts = PromptTable(args.prepared, encode if args.text_encoder else None)
     policy = MarvinPolicy(model, processor, prompts, steps=args.steps, seed=args.seed)
+    if args.compile:
+        print("compiling, this takes a few minutes", flush=True)
+        compile_model(model)
+        policy.warmup()
     return policy, dict(checkpoint=str(args.checkpoint), checkpoint_step=step)
 
 

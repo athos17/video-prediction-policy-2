@@ -14,7 +14,7 @@ from .cli import load_config
 from .datasets.lerobot.utils.normalizer import load_dataset_stats_from_json
 from .evaluation import _ActionMetrics
 from .marvin_data import build_prompt, compose_frame
-from .marvin_protocol import ACTION_HORIZON, History
+from .marvin_protocol import ACTION_HORIZON, History, condition_steps
 
 VIDEO_SIZE_HW = (240, 416)
 # Nine condition frames and eight future frames at the training stride.
@@ -48,6 +48,12 @@ def load_runtime(checkpoint, *, config, wan, prepared, device="cuda:0", text_enc
     if step is None:
         raise ValueError(f"{checkpoint} has no training step")
     return model.eval().requires_grad_(False), load_processor(cfg, prepared), step
+
+
+def compile_model(model):
+    """Compile the stages made of many small GPU operations; the first call takes minutes."""
+    model._predict_action_noise_with_cache = torch.compile(model._predict_action_noise_with_cache)
+    model.mot.prefill_video_cache = torch.compile(model.mot.prefill_video_cache)
 
 
 class PromptTable:
@@ -143,6 +149,12 @@ class MarvinPolicy:
                 seed=seed,
             )["action"]
         return chunk.detach().to("cpu", torch.float32).reshape(ACTION_HORIZON, -1)
+
+    def warmup(self):
+        """One request of the served shapes, so a compiled model is ready before the first client."""
+        condition = torch.zeros(3, len(condition_steps(0)), *VIDEO_SIZE_HW)
+        proprio = torch.zeros(1, self.model.proprio_dim)
+        self.sample(condition, proprio, self.prompts.context(next(iter(self.prompts.files))), 0)
 
     def predict(self, observation, prompt, step):
         context = self.prompts.context(prompt)
