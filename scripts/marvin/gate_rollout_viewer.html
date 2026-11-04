@@ -330,6 +330,7 @@ function render() {
 fetch("data.json").then(response => response.json()).then(data => {
   state.data = data;
   for (const world of data.worlds) $("world").add(new Option(WORLD_NAMES[world] || world, world));
+  if (data.worlds.includes("v5000")) $("world").value = "v5000";
   for (const episode of [...new Set(data.cases.map(item => item.episode))]) $("episode").add(new Option(episode, episode));
   for (const id of ["world", "hand", "episode", "outcome"]) $(id).addEventListener("change", render);
   render();
