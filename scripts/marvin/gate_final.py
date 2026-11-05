@@ -71,7 +71,7 @@ def gate1_rows(directory):
         if match:
             tag = match.group(1)
             step = tags.get(tag, int(tag[len("joint") :]) if tag.startswith("joint") else None)
-            generated.append(dict(tag=tag, step=step, closest=item["closest_to_truth"], l1=item["l1_demonstrated"],
+            generated.append(dict(tag=tag, step=step, closest=item["closest_to_truth"]["rate"], l1=item["l1_demonstrated"],
                                   prompt_gap=item["prompt_gap"], seed_gap=item["seed_gap"]))
     return dict(score=sorted(scores, key=lambda row: row["step"]), generate=sorted(generated, key=lambda row: row["step"]))
 
