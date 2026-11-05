@@ -223,7 +223,7 @@ function el(name, attrs, parent) {
 }
 
 function lineChart(host, config) {
-  const width = 480, height = 240, left = 44, right = 66, top = 10, bottom = 26;
+  const width = 480, height = 240, left = 44, right = 96, top = 10, bottom = 26;
   const { title, series, references = [], format, low, high, ticks, markers } = config;
   host.innerHTML = `<h3>${title}</h3>`;
   if (series.length > 1) {
@@ -276,14 +276,19 @@ function renderCharts(data) {
   const series = (name, short, key, color) => ({ name, short, color, points: rows.map(row => [row.step, row.rates[key].rate]) });
   lineChart($("following-chart"), {
     title: "示教指令的动作最接近真实动作的比例", format: value => `${Math.round(value * 100)}%`, low: 0, high: 1, ticks: [0, 0.25, 0.5, 0.75, 1], markers: true,
-    series: [series("phase 0.5", "0.5", "closest_phase_0.5", "var(--series-1)"), series("全部", "全部", "closest", "var(--series-2)"), series("phase 0", "0", "closest_phase_0.0", "var(--series-3)")],
+    series: [series("phase 0.5", "phase 0.5", "closest_phase_0.5", "var(--series-1)"), series("全部", "全部", "closest", "var(--series-2)"), series("phase 0", "phase 0", "closest_phase_0.0", "var(--series-3)")],
     references: [{ name: "随机", value: rows[0].rates.closest.chance }],
   });
   const evals = data.evals;
+  // The initial Action weights sit far above the rest, so the chart starts at the first evaluation.
+  const trained = evals.rows.filter(row => row.step > 0);
+  const highest = Math.max(evals.hold_mse, ...trained.map(row => row.mse));
+  const tick = 0.04;
   lineChart($("loss-chart"), {
-    title: "留出集动作归一化 MSE（1342 个窗口）", format: value => value.toFixed(3), low: 0, high: 0.14, ticks: [0, 0.04, 0.08, 0.12],
-    series: [{ name: "留出集 MSE", color: "var(--series-1)", points: evals.rows.map(row => [row.step, row.mse]) }],
-    references: [{ name: `保持不动 ${evals.hold_mse}`, value: evals.hold_mse }],
+    title: `留出集动作归一化 MSE（1342 个窗口，初始 ${evals.rows[0].mse.toFixed(2)} 未画出）`, format: value => value.toFixed(3), low: 0, high: highest * 1.05,
+    ticks: Array.from({ length: Math.floor(highest / tick) + 1 }, (_, index) => index * tick),
+    series: [{ name: "留出集 MSE", color: "var(--series-1)", points: trained.map(row => [row.step, row.mse]) }],
+    references: [{ name: `不动 ${evals.hold_mse}`, value: evals.hold_mse }],
   });
 }
 
