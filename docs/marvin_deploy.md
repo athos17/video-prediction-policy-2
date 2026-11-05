@@ -70,9 +70,9 @@ python run_vpp2_sim_client.py --media-root <media> --csv <prepared>/val.csv \
 
 ## 四、机器人上的 dry-run 和执行
 
-客户端装在 Orin 的 `/home/nvidia/sharpa-marvin-client-vpp2`，是 `sharpa-marvin-client` 的副本加上 `deploy/marvin_client/`，原目录没有改动。
+客户端装在 Orin 的 `/home/nvidia/sharpa-marvin-client-vpp2`，是 `sharpa-marvin-client` 的副本加上 `deploy/marvin_client/`，原目录没有改动。给现场同事的完整步骤见其中的 `README_VPP2.md`。
 
-Orin 上的 `a800` 别名指向 `root@115.191.40.142:64988`，和开发机的 `a800`（端口 5313）不是同一台机器。服务要在 64988 这台上按第二节的命令启动，隧道才能连到它。然后在 Orin 上开隧道，客户端默认连 `127.0.0.1:8851`：
+服务要在 Orin 的 `a800` 别名指向的机器上按第二节的命令启动，隧道才能连到它。然后在 Orin 上开隧道，客户端默认连 `127.0.0.1:8851`：
 
 ```bash
 ssh -N -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 -L 8851:127.0.0.1:8851 a800
