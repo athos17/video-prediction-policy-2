@@ -30,7 +30,7 @@ policy:
   api_token_env: MARVIN_POLICY_API_TOKEN
 
 openwam_policy:
-  host: 192.168.50.1
+  host: 127.0.0.1  # SSH tunnel to the server
   port: 8851
   connect_timeout_sec: 10.0
   request_timeout_sec: 300.0
@@ -107,8 +107,8 @@ sharpa_sdk_bridge:
   allowed_command_observer_nodes:
     - /tj/all_topic_log_recorder
   serials:
-    left: C65E9B33C65F
-    right: CA579B36CA56
+    left: C856903EC855
+    right: CD549039CD57
   rate_hz: 100.0
   feedback_rate_hz: 20.0
   watchdog_sec: 0.20

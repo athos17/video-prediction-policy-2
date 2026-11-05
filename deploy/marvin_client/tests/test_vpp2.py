@@ -12,6 +12,7 @@ class VPP2ClientTests(unittest.TestCase):
         self.assertEqual((args.execution_mode, args.execute_horizon, args.control_hz), ("sync", 30, 30))
         self.assertFalse(args.execute)
         self.assertEqual(args.video_crop, [184, 135, 600, 450])
+        self.assertEqual(config["openwam_policy"]["host"], "127.0.0.1")
         self.assertEqual(config["openwam_policy"]["port"], 8851)
         self.assertEqual(config["execution_horizon"], 30)
         self.assertEqual(config["rates"]["action_hz"], 30.0)

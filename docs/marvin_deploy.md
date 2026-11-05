@@ -70,10 +70,19 @@ python run_vpp2_sim_client.py --media-root <media> --csv <prepared>/val.csv \
 
 ## 四、机器人上的 dry-run 和执行
 
-把 `deploy/marvin_client/` 复制到 `/home/nvidia/sharpa-marvin-client` 后运行。不加 `--execute` 就不会发布动作。
+客户端装在 Orin 的 `/home/nvidia/sharpa-marvin-client-vpp2`，是 `sharpa-marvin-client` 的副本加上 `deploy/marvin_client/`，原目录没有改动。
+
+Orin 上的 `a800` 别名指向 `root@115.191.40.142:64988`，和开发机的 `a800`（端口 5313）不是同一台机器。服务要在 64988 这台上按第二节的命令启动，隧道才能连到它。然后在 Orin 上开隧道，客户端默认连 `127.0.0.1:8851`：
 
 ```bash
-./run_vpp2_client_with_env.sh --host <推理机> --max-loops 5 \
+ssh -N -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 -L 8851:127.0.0.1:8851 a800
+```
+
+不加 `--execute` 就不会发布动作。
+
+```bash
+cd ~/sharpa-marvin-client-vpp2
+./run_vpp2_client_with_env.sh --max-loops 5 \
   --task "Pick up the purple coffee capsule with the right hand and put it in the bin."
 ```
 
@@ -84,7 +93,7 @@ python run_vpp2_sim_client.py --media-root <media> --csv <prepared>/val.csv \
 
 - **RTX 5090：** 权重 32.3 GiB 超过显存 31.8 GiB，服务目前跑不起来，需要先实现分层调度。
 - **延迟：** A800 上加 `--compile` 后，服务端每次推理约 0.65 秒。推理期间机器人保持上一个目标，每段动作之间仍有停顿。
-- **网络：** 机器人访问 A800 需要能走通隧道或路由，延迟要在现场实测。从开发机经隧道访问时，请求总耗时约 0.87 秒。
+- **网络：** 机器人经 SSH 隧道访问 A800，延迟要在现场实测。从开发机经隧道访问时，请求总耗时约 0.87 秒。
 - **机器人 dry-run：** 真实相机、ROS 和机器人网络还没有测试过。
 
 ## 已验证（A800，2026-11-04，step 17500）
