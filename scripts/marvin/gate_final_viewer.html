@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VPP2 最终测试</title>
+<style>
+:root {
+  --bg: #fafaf8; --surface: #ffffff; --ink: #1d1d1b; --ink-2: #5c5c57; --ink-3: #8a8a84; --line: #e2e2dc; --grid: #eeeeea;
+  --accent-soft: #eef3f9; --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #161615; --surface: #20201e; --ink: #ecece6; --ink-2: #acaca5; --ink-3: #7c7c76; --line: #34342f; --grid: #2a2a26;
+  --accent-soft: #24303c; --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70;
+} }
+:root[data-theme="dark"] {
+  --bg: #161615; --surface: #20201e; --ink: #ecece6; --ink-2: #acaca5; --ink-3: #7c7c76; --line: #34342f; --grid: #2a2a26;
+  --accent-soft: #24303c; --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.55 -apple-system, "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; display: flex; flex-direction: column; }
+nav { display: flex; flex-wrap: wrap; gap: 2px 18px; padding: 0 16px; background: var(--surface); border-bottom: 1px solid var(--line); flex: none; }
+nav a { padding: 10px 2px; color: var(--ink-2); text-decoration: none; border-bottom: 2px solid transparent; }
+nav a[aria-current="page"] { color: var(--ink); font-weight: 600; border-bottom-color: var(--ink); }
+#overview { flex: 1; overflow-y: auto; }
+.page { max-width: 1120px; margin: 0 auto; padding: 24px 16px 64px; }
+iframe { flex: 1; width: 100%; border: 0; display: none; }
+h1 { font-size: 24px; margin: 0 0 8px; }
+h2 { font-size: 18px; margin: 36px 0 4px; }
+.lede, .note { color: var(--ink-2); max-width: 84ch; margin: 0 0 12px; }
+.note { font-size: 13px; }
+ul.notes { margin: 8px 0 0; padding: 0 0 0 20px; max-width: 84ch; }
+ul.notes li { margin: 6px 0; }
+.table-scroll { overflow-x: auto; margin: 10px 0; }
+table { border-collapse: collapse; background: var(--surface); font-variant-numeric: tabular-nums; min-width: 100%; }
+th, td { padding: 6px 12px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; white-space: normal; min-width: 230px; }
+thead th { color: var(--ink-2); font-weight: 500; vertical-align: bottom; }
+tr.section td { color: var(--ink-2); font-size: 12px; padding-top: 14px; font-weight: 600; text-align: left; }
+.latest { background: var(--accent-soft); }
+.ci { color: var(--ink-3); font-size: 12px; }
+.charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 16px; margin: 12px 0; }
+.chart { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px; min-width: 0; }
+.chart h3 { font-size: 13px; font-weight: 600; margin: 0 0 6px; }
+.chart svg { width: 100%; height: auto; display: block; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; color: var(--ink-2); font-size: 12px; margin-bottom: 4px; }
+.legend i { display: inline-block; width: 18px; height: 2px; vertical-align: middle; margin-right: 5px; }
+.axis { font-size: 11px; fill: var(--ink-3); }
+.direct { font-size: 11px; fill: var(--ink-2); }
+.tip { position: fixed; pointer-events: none; background: var(--ink); color: var(--bg); padding: 4px 7px; border-radius: 4px; font-size: 12px; font-variant-numeric: tabular-nums; z-index: 10; white-space: pre; display: none; }
+a { color: inherit; }
+</style>
+</head>
+<body>
+<nav id="tabs">
+  <a href="#overview">总览</a>
+  <a href="#rollout">多步滚动：完整抓取</a>
+  <a href="#next">A→B 单步</a>
+  <a href="#gate1">视频生成</a>
+</nav>
+<div id="overview"><div class="page">
+  <h1>VPP2 联合训练最终结果（30000 步）</h1>
+  <p class="lede">留出的 6 个 episode 上的全部离线测试。每项测试的样本、种子和判据都与此前相同，可以直接和早期权重比较。没有真机和物理仿真。</p>
+  <ul class="notes" id="notes"></ul>
+
+  <h2>多步滚动：完整抓取</h2>
+  <p class="note">从 A 的第一帧开始，循环生成动作和想象画面，走完一次抓取。5 cm 抓取：手到真实抓取位置 5 cm 内，手型闭合到真实抓取手型的 80%，之后抬高至少 5 cm。真实轨迹按这个判据是 100%。逐条视频和轨迹在「多步滚动：完整抓取」页。</p>
+  <div class="table-scroll"><table id="rollout-table"></table></div>
+
+  <h2>A→B 单步</h2>
+  <p class="note">同样从 A 的第一帧出发，只生成一次：动作 1.07 秒，视频 2.13 秒。随机水平 50%。</p>
+  <div class="table-scroll"><table id="next-table"></table></div>
+
+  <h2>动作的指令跟随</h2>
+  <p class="note">在留出窗口上换不同指令生成动作，看示教指令的动作是否最接近真实动作。phase 0 是子任务第一帧，phase 0.5 是到抓取的中点。</p>
+  <div class="charts"><div class="chart" id="following-chart"></div><div class="chart" id="loss-chart"></div></div>
+  <div class="table-scroll"><table id="action-table"></table></div>
+
+  <h2>视频的指令跟随</h2>
+  <p class="note">打分：真实未来在哪条指令下去噪误差最小。生成：phase 0.5 的窗口换不同指令生成视频，看示教指令的视频是否最接近真实视频。联合权重的 L1 变大是因为联合训练只在 σ=1 上训练视频，多步生成发灰，不代表跟随变差。</p>
+  <div class="table-scroll"><table id="gate1-table"></table></div>
+</div></div>
+<iframe id="frame-rollout" title="多步滚动"></iframe>
+<iframe id="frame-next" title="A→B 单步"></iframe>
+<iframe id="frame-gate1" title="视频生成"></iframe>
+<div class="tip" id="tip"></div>
+<script>
+const $ = id => document.getElementById(id);
+const NS = "http://www.w3.org/2000/svg";
+const FRAMES = { rollout: "rollout/", next: "next/", gate1: "gate1/" };
+const WORLDS = { v5000: "Video 5000 步画面", j17500: "联合 17500 步画面", j30000: "联合 30000 步画面" };
+const LABELS = { init: "预训练", s1000: "Video 1000 步", s2000: "Video 2000 步", s3000: "Video 3000 步", s4000: "Video 4000 步", s5000: "Video 5000 步" };
+
+function route() {
+  const tab = (location.hash || "#overview").slice(1);
+  for (const link of $("tabs").children) {
+    if (link.getAttribute("href") === `#${tab}`) link.setAttribute("aria-current", "page");
+    else link.removeAttribute("aria-current");
+  }
+  $("overview").style.display = tab === "overview" ? "block" : "none";
+  for (const name in FRAMES) {
+    const frame = $(`frame-${name}`);
+    frame.style.display = name === tab ? "block" : "none";
+    if (name === tab && !frame.getAttribute("src")) frame.src = FRAMES[name];
+  }
+}
+addEventListener("hashchange", route);
+route();
+
+const percent = value => value == null ? "–" : `${Math.round(value * 100)}%`;
+const interval = item => item ? `${percent(item.mean ?? item.rate)} <span class="ci">[${Math.round(item.ci95[0] * 100)}, ${Math.round(item.ci95[1] * 100)}]</span>` : "–";
+const cm = value => value == null ? "–" : `${(value * 100).toFixed(1)} cm`;
+const fixed = digits => value => value == null ? "–" : value.toFixed(digits);
+
+function table(host, heads, rows, latest) {
+  const isLatest = index => latest != null && latest.includes(index);
+  const head = `<thead><tr>${heads.map((text, index) => `<th class="${isLatest(index) ? "latest" : ""}">${text}</th>`).join("")}</tr></thead>`;
+  const body = rows.map(row => row.section
+    ? `<tr class="section"><td colspan="${heads.length}">${row.section}</td></tr>`
+    : `<tr>${row.map((cell, index) => `<td class="${isLatest(index) ? "latest" : ""}">${cell}</td>`).join("")}</tr>`).join("");
+  host.innerHTML = head + `<tbody>${body}</tbody>`;
+}
+
+function renderRollout(data) {
+  if (!data) { $("rollout-table").innerHTML = "<tr><td>多步滚动仍在运行</td></tr>"; return; }
+  const columns = data.columns;
+  const heads = ["", ...columns.map(column => `策略 ${column.step} 步<br>${WORLDS[column.world]}`)];
+  const latest = columns.flatMap((column, index) => column.step === 30000 ? [index + 1] : []);
+  const row = (label, render) => [label, ...columns.map(render)];
+  const stat = (group, key, render = interval) => column => {
+    const item = column.groups[group] && column.groups[group][key];
+    return render === interval ? interval(item) : render(item && item.median);
+  };
+  const counts = (first, second, third) => column => {
+    const far = column.same_hand_far;
+    return `${far[first]} / ${far[second]} / ${far[third]}`;
+  };
+  const mean = key => column => { const item = column.groups.all[key]; return item ? item.mean.toFixed(1) : "–"; };
+  const far = columns[0].same_hand_far.cases;
+  const rows = [
+    { section: `全部 ${columns[0].groups.all.cases} 对` },
+    row("指令 A → 抓到 A（5 cm）", stat("all", "a_grasp_5cm")),
+    row("指令 B → 抓到 B（5 cm）", stat("all", "b_grasp_5cm")),
+    row("指令 A → 抓到 A（3 cm）", stat("all", "a_grasp_3cm")),
+    row("指令 B → 抓到 B（3 cm）", stat("all", "b_grasp_3cm")),
+    row("指令 A 距 A 最近距离（中位数）", stat("all", "a_reach", cm)),
+    row("指令 B 距 B 最近距离（中位数）", stat("all", "b_reach", cm)),
+    row("指令 A 跟踪真实 A 的误差（中位数）", stat("all", "a_tracking", cm)),
+    row("指令 B 比指令 A 更接近 B", stat("all", "b_prompt_nearer_b")),
+    row("真实画面逐段预测 A（上限，只测了 A）", column => interval((data.teachers[`s${column.step}`] || { all: {} }).all.a_grasp_5cm)),
+    { section: `同一只手，两个目标相距至少 8 cm（${far} 对，单位：对）` },
+    row("指令 A：抓到 A / 抓成 B / 都没有", counts("a_gets_a", "a_gets_b", "a_neither")),
+    row("指令 B：抓到 B / 抓成 A / 都没有", counts("b_gets_b", "b_gets_a", "b_neither")),
+    { section: "不同手" },
+    row("指令 A → 抓到 A", stat("other_hand", "a_grasp_5cm")),
+    row("指令 B → 抓到 B", stat("other_hand", "b_grasp_5cm")),
+    { section: "短 episode（3、30、57）" },
+    row("指令 A → 抓到 A", stat("short_episodes", "a_grasp_5cm")),
+    row("指令 B → 抓到 B", stat("short_episodes", "b_grasp_5cm")),
+    { section: "长 episode（70、80、85）" },
+    row("指令 A → 抓到 A", stat("long_episodes", "a_grasp_5cm")),
+    row("指令 B → 抓到 B", stat("long_episodes", "b_grasp_5cm")),
+    { section: "想象画面与真实 A 的像素 L1（0-255）" },
+    ...[1, 2, 4, 6].map(second => row(`第 ${second} 秒`, mean(`a_video_l1_${second}s`))),
+  ];
+  table($("rollout-table"), heads, rows, latest);
+}
+
+function renderNext(runs) {
+  const heads = ["", ...runs.map(run => `联合 ${run.step} 步`)];
+  const latest = runs.flatMap((run, index) => run.step === 30000 ? [index + 1] : []);
+  const row = (label, render) => [label, ...runs.map(render)];
+  table($("next-table"), heads, [
+    { section: "动作（1.07 秒）" },
+    row("指令 B 比指令 A 更朝 B 前进，全部", run => interval(run.action.all.b_prompt_nearer_goal)),
+    row("同一只手", run => interval(run.action.same_hand.b_prompt_nearer_goal)),
+    row("不同手", run => interval(run.action.other_hand.b_prompt_nearer_goal)),
+    row("指令 A 比指令 B 更接近真实 A", run => interval(run.action.all.a_prompt_nearer_real_a)),
+    row("两条指令的动作终点差（种子差）", run => `${cm(run.action.all.prompt_gap)}（${cm(run.action.all.seed_gap)}）`),
+    { section: "视频（2.13 秒）" },
+    row("指令 B 末帧比指令 A 更接近 B 的抓取画面，全部", run => interval(run.video.all.frame_b_prompt_nearer_b_grasp)),
+    row("同一只手", run => interval(run.video.same_hand.frame_b_prompt_nearer_b_grasp)),
+    row("不同手", run => interval(run.video.other_hand.frame_b_prompt_nearer_b_grasp)),
+    row("指令 A 比指令 B 更接近真实 A", run => interval(run.video.all.frame_a_prompt_nearer_real_a)),
+    row("与真实 A 的像素 L1", run => run.video.all.l1.toFixed(1)),
+  ], latest);
+}
+
+function renderAction(rows) {
+  const chance = rows[0].rates.closest.chance;
+  const heads = ["权重", `最接近示教<br>随机 ${percent(chance)}`, "phase 0", "phase 0.5", "同手选对物体", "选对手", "动作 L1", "两条指令终点差<br>同手 / 不同手", "种子差"];
+  const lastIndex = rows.length - 1;
+  const cells = rows.map(row => {
+    const name = row.step ? `联合 ${row.step} 步` : "初始权重";
+    return [name, interval(row.rates.closest), interval(row.rates["closest_phase_0.0"]), interval(row.rates["closest_phase_0.5"]),
+            interval(row.rates.object), interval(row.rates.hand), row.l1_demonstrated.toFixed(3),
+            `${cm(row.gap_same_hand)} / ${cm(row.gap_other_hand)}`, cm(row.gap_seed)];
+  });
+  const host = $("action-table");
+  table(host, heads, cells);
+  host.tBodies[0].rows[lastIndex].classList.add("latest");
+}
+
+function renderGate1(gate1) {
+  const generated = Object.fromEntries(gate1.generate.map(row => [row.tag, row]));
+  const chance = gate1.score[0].top1.chance;
+  const name = row => row.tag.startsWith("joint") ? `联合 ${row.step} 步` : LABELS[row.tag];
+  const cells = gate1.score.map(row => {
+    const made = generated[row.tag];
+    return [name(row), interval(row.top1), interval(row.object), interval(row.hand), made ? percent(made.closest) : "–", made ? made.l1.toFixed(1) : "–"];
+  });
+  const host = $("gate1-table");
+  table(host, ["权重", `打分：示教指令最优<br>随机 ${percent(chance)}`, "打分：同手选对物体", "打分：选对手", "生成：最接近真实", "生成：像素 L1"], cells);
+  host.tBodies[0].rows[cells.length - 1].classList.add("latest");
+}
+
+function el(name, attrs, parent) {
+  const node = document.createElementNS(NS, name);
+  for (const key in attrs) node.setAttribute(key, attrs[key]);
+  if (parent) parent.appendChild(node);
+  return node;
+}
+
+function lineChart(host, config) {
+  const width = 480, height = 240, left = 44, right = 66, top = 10, bottom = 26;
+  const { title, series, references = [], format, low, high, ticks, markers } = config;
+  host.innerHTML = `<h3>${title}</h3>`;
+  if (series.length > 1) {
+    const legend = document.createElement("div");
+    legend.className = "legend";
+    legend.innerHTML = series.map(line => `<span><i style="background:${line.color}"></i>${line.name}</span>`).join("");
+    host.appendChild(legend);
+  }
+  const svg = el("svg", { viewBox: `0 0 ${width} ${height}`, role: "img", "aria-label": title }, host);
+  const steps = series[0].points.map(point => point[0]);
+  const maxStep = Math.max(...steps);
+  const x = step => left + step / maxStep * (width - left - right);
+  const y = value => top + (1 - (value - low) / (high - low)) * (height - top - bottom);
+  for (const tick of ticks) {
+    el("line", { x1: left, x2: width - right, y1: y(tick), y2: y(tick), stroke: "var(--grid)" }, svg);
+    el("text", { x: left - 6, y: y(tick) + 4, "text-anchor": "end", class: "axis" }, svg).textContent = format(tick);
+  }
+  for (let step = 0; step <= maxStep; step += 5000) {
+    el("text", { x: x(step), y: height - 8, "text-anchor": "middle", class: "axis" }, svg).textContent = step ? `${step / 1000}k` : "0";
+  }
+  for (const reference of references) {
+    el("line", { x1: left, x2: width - right, y1: y(reference.value), y2: y(reference.value), stroke: "var(--ink-3)", "stroke-dasharray": "3 4" }, svg);
+    el("text", { x: width - right + 4, y: y(reference.value) + 4, class: "direct" }, svg).textContent = reference.name;
+  }
+  for (const line of series) {
+    const path = line.points.map((point, index) => `${index ? "L" : "M"}${x(point[0]).toFixed(1)} ${y(point[1]).toFixed(1)}`).join("");
+    el("path", { d: path, fill: "none", stroke: line.color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }, svg);
+    if (markers) for (const point of line.points) el("circle", { cx: x(point[0]), cy: y(point[1]), r: 4, fill: line.color, stroke: "var(--surface)", "stroke-width": 2 }, svg);
+    const last = line.points[line.points.length - 1];
+    el("text", { x: x(last[0]) + 8, y: y(last[1]) + 4, class: "direct" }, svg).textContent = `${line.short || ""} ${format(last[1])}`.trim();
+  }
+  const cursor = el("line", { y1: top, y2: height - bottom, stroke: "var(--ink-3)", visibility: "hidden" }, svg);
+  const hit = el("rect", { x: left, y: top, width: width - left - right, height: height - top - bottom, fill: "transparent" }, svg);
+  const tip = $("tip");
+  hit.addEventListener("mousemove", event => {
+    const box = svg.getBoundingClientRect();
+    const position = (event.clientX - box.left) / box.width * width;
+    const nearest = steps.reduce((best, step) => Math.abs(x(step) - position) < Math.abs(x(best) - position) ? step : best, steps[0]);
+    cursor.setAttribute("x1", x(nearest)); cursor.setAttribute("x2", x(nearest)); cursor.setAttribute("visibility", "visible");
+    tip.textContent = `${nearest} 步\n` + series.map(line => `${line.name}: ${format(line.points.find(point => point[0] === nearest)[1])}`).join("\n");
+    tip.style.display = "block";
+    tip.style.left = `${Math.min(event.clientX + 12, innerWidth - 170)}px`;
+    tip.style.top = `${event.clientY + 12}px`;
+  });
+  hit.addEventListener("mouseleave", () => { tip.style.display = "none"; cursor.setAttribute("visibility", "hidden"); });
+}
+
+function renderCharts(data) {
+  const rows = data.action;
+  const series = (name, short, key, color) => ({ name, short, color, points: rows.map(row => [row.step, row.rates[key].rate]) });
+  lineChart($("following-chart"), {
+    title: "示教指令的动作最接近真实动作的比例", format: value => `${Math.round(value * 100)}%`, low: 0, high: 1, ticks: [0, 0.25, 0.5, 0.75, 1], markers: true,
+    series: [series("phase 0.5", "0.5", "closest_phase_0.5", "var(--series-1)"), series("全部", "全部", "closest", "var(--series-2)"), series("phase 0", "0", "closest_phase_0.0", "var(--series-3)")],
+    references: [{ name: "随机", value: rows[0].rates.closest.chance }],
+  });
+  const evals = data.evals;
+  lineChart($("loss-chart"), {
+    title: "留出集动作归一化 MSE（1342 个窗口）", format: value => value.toFixed(3), low: 0, high: 0.14, ticks: [0, 0.04, 0.08, 0.12],
+    series: [{ name: "留出集 MSE", color: "var(--series-1)", points: evals.rows.map(row => [row.step, row.mse]) }],
+    references: [{ name: `保持不动 ${evals.hold_mse}`, value: evals.hold_mse }],
+  });
+}
+
+fetch("data.json").then(response => response.json()).then(data => {
+  $("notes").innerHTML = data.notes.map(note => `<li>${note}</li>`).join("");
+  renderRollout(data.rollout);
+  renderNext(data.next);
+  renderAction(data.action);
+  renderGate1(data.gate1);
+  renderCharts(data);
+});
+</script>
+</body>
+</html>

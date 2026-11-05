@@ -59,7 +59,7 @@ video { width: 100%; display: block; background: #000; border-radius: 4px; aspec
   <h1>多步滚动：从 A 的第一帧走完一次抓取</h1>
   <p class="lede">模型每次生成 32 步动作（1.07 秒），并由视频模型想象这段时间的画面；下一轮观测这些画面，并把上一段最后的动作指令当作本体状态。这里没有机器人和物理仿真，想象的画面也不受动作影响，因此「抓取」只代表轨迹和手型达到了真实抓取时的姿态，不代表物体真的被抓起。</p>
   <div class="controls">
-    <label>想象画面的模型 <select id="world"></select></label>
+    <label>策略和想象画面 <select id="world"></select></label>
     <label>手 <select id="hand"><option value="all">全部</option><option value="same">A、B 同一只手</option><option value="other">A、B 不同手</option></select></label>
     <label>Episode <select id="episode"><option value="all">全部</option></select></label>
     <label>结果 <select id="outcome"><option value="all">全部</option><option value="both">A、B 都达到 5 cm 抓取</option><option value="b">B 达到</option><option value="notb">B 未达到</option></select></label>
@@ -72,7 +72,12 @@ video { width: 100%; display: block; background: #000; border-radius: 4px; aspec
 <div class="tip" id="tip"></div>
 <script>
 const HANDS = { left: "左手", right: "右手" };
-const WORLD_NAMES = { v5000: "Video 5000 步（画质正常）", j17500: "联合 17500 步（画面发灰）" };
+const WORLD_NAMES = {
+  v5000: "Video 5000 步（画质正常）", j17500: "联合 17500 步（画面发灰）",
+  s30000_v5000: "30000 步策略 + Video 5000 步画面", s30000_j30000: "30000 步策略 + 联合 30000 步画面",
+  s17500_v5000: "17500 步策略 + Video 5000 步画面", s17500_j17500: "17500 步策略 + 联合 17500 步画面",
+};
+const teacherName = () => state.data.teacher ? `真实画面逐段预测 A（${state.data.teacher}）` : "真实画面逐段预测 A";
 const METERS = 1000;
 const state = { data: null };
 const $ = id => document.getElementById(id);
@@ -217,7 +222,7 @@ function buildCharts(host, item, world, video) {
     const entry = document.createElement("span");
     const swatch = el("svg", { width: 22, height: 8 }, entry);
     el("line", { x1: 1, x2: 21, y1: 4, y2: 4, stroke: line.color, "stroke-width": Math.max(line.width, 1.5), "stroke-dasharray": line.dash }, swatch);
-    entry.appendChild(document.createTextNode({ "imagined A": "想象 指令 A", "imagined B": "想象 指令 B", "real A": "真实 A", "real B": "真实 B", "real frames A": "真实画面逐段预测 A" }[line.key]));
+    entry.appendChild(document.createTextNode({ "imagined A": "想象 指令 A", "imagined B": "想象 指令 B", "real A": "真实 A", "real B": "真实 B", "real frames A": teacherName() }[line.key]));
     legend.appendChild(entry);
   }
   host.appendChild(legend);
@@ -302,7 +307,7 @@ function summaryRows(world, group) {
     <tr><td>最近距离（中位数）</td><td>${cell(run, "a_reach", centimeters)}</td><td>${cell(run, "b_reach", centimeters)}</td></tr>
     <tr><td>对照：另一条指令也算达成（5 cm）</td><td>${cell(run, "b_prompt_grasps_a_5cm")}</td><td>${cell(run, "a_prompt_grasps_b_5cm")}</td></tr>
     <tr><td>比另一条指令更接近目标（随机 50%）</td><td>${cell(run, "a_prompt_nearer_a")}</td><td>${cell(run, "b_prompt_nearer_b")}</td></tr>
-    <tr><td>真实画面逐段预测 A，5 cm 抓取</td><td>${cell(teacher, "a_grasp_5cm")}</td><td>–</td></tr>
+    <tr><td>${teacherName()}，5 cm 抓取</td><td>${cell(teacher, "a_grasp_5cm")}</td><td>–</td></tr>
     <tr><td>校准：真实轨迹，5 cm 抓取</td><td>${cell(real, "a_grasp_5cm")}</td><td>${cell(real, "b_grasp_5cm")}</td></tr>`;
 }
 
@@ -329,8 +334,9 @@ function render() {
 
 fetch("data.json").then(response => response.json()).then(data => {
   state.data = data;
-  for (const world of data.worlds) $("world").add(new Option(WORLD_NAMES[world] || world, world));
-  if (data.worlds.includes("v5000")) $("world").value = "v5000";
+  const worlds = [...data.worlds].sort((a, b) => Object.keys(WORLD_NAMES).indexOf(a) - Object.keys(WORLD_NAMES).indexOf(b));
+  for (const world of worlds) $("world").add(new Option(WORLD_NAMES[world] || world, world));
+  for (const preferred of ["v5000", "s30000_v5000"]) if (data.worlds.includes(preferred)) $("world").value = preferred;
   for (const episode of [...new Set(data.cases.map(item => item.episode))]) $("episode").add(new Option(episode, episode));
   for (const id of ["world", "hand", "episode", "outcome"]) $(id).addEventListener("change", render);
   render();

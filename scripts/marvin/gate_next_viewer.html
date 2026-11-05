@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A→B 单步指令测试</title>
+<style>
+:root { --bg: #fafaf8; --surface: #ffffff; --ink: #1d1d1b; --ink-2: #5c5c57; --ink-3: #8a8a84; --line: #e2e2dc; --a: #2a78c8; --b: #d9622b; --good: #2e7d4f; --bad: #b3372f; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #161615; --surface: #20201e; --ink: #ecece6; --ink-2: #acaca5; --ink-3: #7c7c76; --line: #34342f; --a: #5ba3e6; --b: #ee8a57; --good: #62b986; --bad: #e0776e; } }
+:root[data-theme="dark"] { --bg: #161615; --surface: #20201e; --ink: #ecece6; --ink-2: #acaca5; --ink-3: #7c7c76; --line: #34342f; --a: #5ba3e6; --b: #ee8a57; --good: #62b986; --bad: #e0776e; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.55 -apple-system, "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; }
+main { max-width: 1320px; margin: 0 auto; padding: 24px 16px 64px; }
+h1 { font-size: 22px; margin: 0 0 6px; }
+.lede { color: var(--ink-2); margin: 0 0 12px; max-width: 80ch; }
+.controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 10px 0; position: sticky; top: 0; background: var(--bg); z-index: 5; border-bottom: 1px solid var(--line); }
+.controls label { color: var(--ink-2); display: flex; gap: 6px; align-items: center; }
+select { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
+#count { color: var(--ink-3); margin-left: auto; font-variant-numeric: tabular-nums; }
+section { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px; margin: 16px 0; }
+h2 { font-size: 15px; margin: 0 0 2px; }
+.prompts, .facts { color: var(--ink-2); margin-bottom: 8px; font-variant-numeric: tabular-nums; }
+.pa { color: var(--a); font-weight: 600; } .pb { color: var(--b); font-weight: 600; }
+.yes { color: var(--good); font-weight: 600; } .no { color: var(--bad); font-weight: 600; }
+.body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+video, img { width: 100%; display: block; border-radius: 4px; background: #000; }
+img { background: #fff; }
+@media (max-width: 860px) { .body { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>A→B 单步指令测试</h1>
+  <p class="lede">从 A 的第一帧出发，分别下发 A 和 B 的指令，只生成一次：动作 1.07 秒，视频 2.13 秒。视频三行依次是生成结果、真实片段开头、真实抓取画面。轨迹图中实线为生成，虚线为真实，蓝色为 A，橙色为 B，方块为真实抓取位置。</p>
+  <div class="controls">
+    <label>权重 <select id="tag"></select></label>
+    <label>手 <select id="hand"><option value="all">全部</option><option value="same">同一只手</option><option value="other">不同手</option></select></label>
+    <label>Episode <select id="episode"><option value="all">全部</option></select></label>
+    <span id="count"></span>
+  </div>
+  <div id="cases"></div>
+</main>
+<script>
+const HANDS = { left: "左手", right: "右手" };
+const NAMES = { s17500: "联合 17500 步", s30000: "联合 30000 步" };
+const $ = id => document.getElementById(id);
+const cm = value => `${(value * 100).toFixed(1)} cm`;
+const mark = value => `<span class="${value >= 0.5 ? "yes" : "no"}">${Math.round(value * 100)}%</span>`;
+let data;
+
+function renderCase(item, tag) {
+  const run = item.runs[tag], [a, b] = item.prompts;
+  const section = document.createElement("section");
+  section.innerHTML = `<h2>${item.id}（${item.sameHand ? "同一只手" : "不同手"}）</h2>
+    <div class="prompts"><span class="pa">A</span> ${HANDS[a.hand]} ${a.object} · <span class="pb">B</span> ${HANDS[b.hand]} ${b.object}</div>
+    <div class="facts">朝 B 抓取点前进：指令 B ${cm(run.progressB)}，指令 A ${cm(run.progressA)}（起点距 B ${cm(run.goal)}）· 两条指令终点相差 ${cm(run.gap)}，种子差 ${cm(run.seedGap)} · 指令 B 动作更接近 B 的种子比例 ${mark(run.actionB)} · 指令 B 视频末帧更接近 B 抓取画面的种子比例 ${mark(run.videoB)}</div>
+    <div class="body"><video controls muted playsinline loop></video><img loading="lazy" src="${tag}/${item.id}.png" alt="${item.id} 手臂轨迹俯视图"></div>`;
+  const video = section.querySelector("video");
+  // Loading through a blob keeps seeking working on a static server without range requests.
+  const observer = new IntersectionObserver(entries => {
+    if (!entries.some(entry => entry.isIntersecting)) return;
+    observer.disconnect();
+    fetch(`${tag}/${item.id}.mp4`).then(response => response.blob()).then(blob => { video.src = URL.createObjectURL(blob); });
+  }, { rootMargin: "600px" });
+  observer.observe(section);
+  return section;
+}
+
+function render() {
+  const tag = $("tag").value, hand = $("hand").value, episode = $("episode").value;
+  const kept = data.cases.filter(item => item.runs[tag]
+    && (hand === "all" || item.sameHand === (hand === "same"))
+    && (episode === "all" || String(item.episode) === episode));
+  $("count").textContent = `显示 ${kept.length} / ${data.cases.length} 对`;
+  $("cases").replaceChildren(...kept.map(item => renderCase(item, tag)));
+}
+
+fetch("data.json").then(response => response.json()).then(loaded => {
+  data = loaded;
+  for (const tag of [...data.tags].reverse()) $("tag").add(new Option(NAMES[tag] || tag, tag));
+  for (const episode of [...new Set(data.cases.map(item => item.episode))]) $("episode").add(new Option(episode, episode));
+  for (const id of ["tag", "hand", "episode"]) $(id).addEventListener("change", render);
+  render();
+});
+</script>
+</body>
+</html>

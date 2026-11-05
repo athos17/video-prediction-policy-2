@@ -21,12 +21,13 @@ FUTURE_FRAME = 9
 # Generated tiles fill rows 0-2 of an atlas; the ground truth sits in row 3, column 0.
 ATLAS_ROWS = 4
 PHASES = (
-    dict(id="p50", label="phase 0.5", suffix="_p50", models=("init", "s1000", "s3000", "s4000")),
+    dict(id="p50", label="phase 0.5", suffix="_p50", models=("init", "s4000", "joint17500", "joint30000")),
     dict(id="p0", label="phase 0", suffix="", models=("init", "s3000")),
 )
-SCORES = ("init", "s1000", "s2000", "s3000", "s4000")
-LABELS = dict(init="预训练", s1000="1000 步", s2000="2000 步", s3000="3000 步", s4000="4000 步")
-SHORT = dict(init="预", s1000="1k", s3000="3k", s4000="4k")
+SCORES = ("init", "s1000", "s2000", "s3000", "s4000", "s5000", "joint17500", "joint30000")
+LABELS = dict(init="预训练", s1000="1000 步", s2000="2000 步", s3000="3000 步", s4000="4000 步", s5000="5000 步",
+              joint17500="联合 17500 步", joint30000="联合 30000 步")
+SHORT = dict(init="预", s3000="3k", s4000="4k", joint17500="17k", joint30000="30k")
 
 
 def encode(frames, path):

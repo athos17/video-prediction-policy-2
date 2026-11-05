@@ -466,7 +466,7 @@ def site(args):
         print(pair["case"], flush=True)
     summary = json.loads((args.output / "rollout_summary.json").read_text())
     (args.site / "data.json").write_text(json.dumps(
-        dict(worlds=worlds, summary=summary, cases=cases, frameStep=FRAME_STRIDE / FPS),
+        dict(worlds=worlds, summary=summary, cases=cases, frameStep=FRAME_STRIDE / FPS, teacher=args.tag),
         ensure_ascii=False, separators=(",", ":")))
     shutil.copy(Path(__file__).with_name("gate_rollout_viewer.html"), args.site / "index.html")
 
@@ -476,7 +476,7 @@ def main():
     parser.add_argument("command", choices=("truth", "imagine", "report", "site"))
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--site", type=Path)
-    parser.add_argument("--tag")
+    parser.add_argument("--tag", help="imagine: names the rollout. site: names the weights of rollout_real")
     parser.add_argument("--checkpoint", type=Path, help="Joint checkpoint under test")
     parser.add_argument("--video", type=Path, help="Video weights the joint run started from")
     parser.add_argument("--action", type=Path, help="Action weights the joint run started from")
